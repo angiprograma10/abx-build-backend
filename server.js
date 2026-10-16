@@ -128,7 +128,7 @@ Para acciones explícitas, explica que has preparado una acción y que deberá c
   const timeoutId = setTimeout(() => controller.abort(), 20000);
 
   try {
-    const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+    const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
     const response = await fetch(
       'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent',
       {
