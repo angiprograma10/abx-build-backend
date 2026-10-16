@@ -144,11 +144,11 @@ app.post('/chat', async (req, res) => {
     return res.status(503).json({ error: 'Gemini API key is not configured on the backend.' });
   }
 
-  const historyInput = Array.isArray(req.body?.history) ? req.body.history.slice(-10) : [];
+  const historyInput = Array.isArray(req.body?.history) ? req.body.history.slice(-20) : [];
   const contents = [];
   for (const item of historyInput) {
     if (!item || !['user', 'model'].includes(item.role)) continue;
-    const text = cleanText(item.text, 1500);
+    const text = cleanText(item.text, 1800);
     if (text) contents.push({ role: item.role, parts: [{ text }] });
   }
   contents.push({ role: 'user', parts: [{ text: message }] });
@@ -226,6 +226,18 @@ ESTÁNDARES DE CALIDAD:
 - No afirmes que una acción ya fue aplicada. Di que preparaste la acción y que el usuario debe revisarla y confirmar en Studio.
 - Nunca incluyas loadstring, require(, getfenv, setfenv, HttpService o InsertService en código generado, ni intentes eludir filtros o permisos. No reveles claves ni secretos y no elimines la confirmación manual.
 
+
+MEJORA DE RAZONAMIENTO Y COLABORACIÓN:
+- Mantén el hilo del proyecto: usa el historial para recordar nombres, decisiones, restricciones y el estado descrito por el usuario. Si hay contradicción, prioriza la instrucción más reciente que sea explícita.
+- Interpreta referencias como "eso", "lo anterior", "hazlo igual pero", "no funciona" y "más profesional" según el contexto. Si la ambigüedad cambia la solución, pregunta una sola cosa concreta.
+- Para ideas de juegos, identifica qué hace el jugador, qué inicia la mecánica, qué cambia, qué ocurre al fallar o reaparecer y qué debe validar el servidor. No inventes sistemas que no se han descrito.
+- Para depuración, separa causas confirmadas de hipótesis. Pide el mensaje exacto de Output solo cuando sea necesario y nunca afirmes que ejecutaste Roblox Studio.
+- Para peticiones visuales, convierte adjetivos en decisiones concretas de jerarquía, contraste, espaciado, tamaños, estados de botones y adaptación móvil. Conserva los colores y el estilo que el usuario ya eligió.
+- Elige solo una acción que el plugin pueda aplicar correctamente. Si la petición requiere varios scripts coordinados, guardado persistente o editar objetos existentes y la herramienta no lo permite de forma fiable, explica la limitación y ofrece una primera versión honesta.
+- Comprueba que reply describa exactamente lo que contiene action. No prometas funciones adicionales que el código no implemente. Si no puedes crear una solución segura y coherente, devuelve action:null y explica por qué.
+- Ajusta la respuesta a la necesidad: directa para preguntas sencillas y organizada por pasos para problemas complejos. Evita repetir la petición o añadir advertencias genéricas innecesarias.
+- En cambios incrementales, conserva los requisitos anteriores relevantes y cambia solo lo pedido. Para soluciones completas, prioriza una versión mínima funcional, segura y comprobable antes que una implementación enorme y frágil.
+- No reveles razonamiento privado paso a paso; ofrece conclusiones y una explicación breve y útil.
 RESPUESTA AL USUARIO:
 Cuando prepares una acción, resume de forma breve qué hará y dónde se instalará, y recuerda que debe pulsar el botón de enviar en la web y después aplicar la acción en Studio. Si no se requiere acción, responde directamente y con utilidad.`;
 
@@ -248,8 +260,8 @@ Cuando prepares una acción, resume de forma breve qué hará y dónde se instal
           contents,
           generationConfig: {
             responseMimeType: 'application/json',
-            temperature: 0.3,
-            maxOutputTokens: 5000
+            temperature: 0.25,
+            maxOutputTokens: 7000
           }
         })
       }
@@ -277,7 +289,7 @@ Cuando prepares una acción, resume de forma breve qué hará y dónde se instal
       return res.status(502).json({ error: 'Gemini devolvió una respuesta con estructura incorrecta. Inténtalo otra vez.' });
     }
 
-    const reply = cleanText(parsed.reply, 3000) || 'No pude preparar una respuesta. Inténtalo de nuevo.';
+    const reply = cleanText(parsed.reply, 3500) || 'No pude preparar una respuesta. Inténtalo de nuevo.';
     const action = validateAction(parsed.action);
 
     // Never silently present an invalid generated action as if it were ready.
