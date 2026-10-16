@@ -369,16 +369,16 @@ Cuando prepares una acción, resume de forma breve qué hará y dónde se instal
 
   try {
     const allowedModels = new Set([
-      'gemini-3.5-flash-lite',
-      'gemini-3.6-flash',
-      'gemini-3.8-flash'
+      'gemini-3.1-flash-lite',
+      'gemini-3-flash-preview',
+      'gemini-3.1-pro-preview'
     ]);
     const requestedModel = cleanText(req.body?.model, 80);
     const model = allowedModels.has(requestedModel)
       ? requestedModel
       : (process.env.GEMINI_MODEL && allowedModels.has(process.env.GEMINI_MODEL)
           ? process.env.GEMINI_MODEL
-          : 'gemini-3.5-flash-lite');
+          : 'gemini-3.1-flash-lite');
     const response = await fetch(
       'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent',
       {
