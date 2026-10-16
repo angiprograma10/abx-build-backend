@@ -10,6 +10,19 @@ const MAX_MESSAGE_LENGTH = 2000;
 const ALLOWED_COLORS = new Set([
   'red', 'blue', 'green', 'yellow', 'black', 'white', 'purple', 'orange'
 ]);
+const ALLOWED_PARENTS = new Set([
+  'Workspace', 'ReplicatedStorage', 'ServerStorage', 'ServerScriptService',
+  'StarterGui', 'StarterPack', 'StarterPlayerScripts', 'StarterCharacterScripts',
+  'Lighting', 'SoundService', 'Teams', 'ReplicatedFirst'
+]);
+const ALLOWED_VALUE_TYPES = new Set(['StringValue', 'BoolValue', 'IntValue', 'NumberValue']);
+const ALLOWED_REMOTE_TYPES = new Set(['RemoteEvent', 'RemoteFunction', 'BindableEvent', 'BindableFunction']);
+const ALLOWED_OBJECT_TYPES = new Set([
+  'Folder', 'Model', 'Attachment', 'PointLight', 'SpotLight', 'SurfaceLight',
+  'Highlight', 'Smoke', 'Fire', 'Sparkles', 'ClickDetector', 'ProximityPrompt',
+  'SpawnLocation', 'Seat', 'VehicleSeat', 'WeldConstraint', 'Animation',
+  'Sound', 'ParticleEmitter', 'Beam', 'Trail'
+]);
 
 function cleanText(value, maxLength = 500) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
@@ -51,13 +64,17 @@ function validatePartProperties(raw, sizeFallback, positionFallback) {
   };
 }
 
+function validParent(value, fallback = 'Workspace') {
+  return ALLOWED_PARENTS.has(value) ? value : fallback;
+}
+
 function validateAction(rawAction) {
   if (!rawAction || typeof rawAction !== 'object' || Array.isArray(rawAction)) return null;
 
   if (rawAction.type === 'CREATE_PART') {
     const properties = validatePartProperties(rawAction, [1, 1, 1], [0, 5, 0]);
     if (!properties) return null;
-    return { type: 'CREATE_PART', ...properties };
+    return { type: 'CREATE_PART', ...properties, parent: validParent(rawAction.parent, 'Workspace') };
   }
 
   if (rawAction.type === 'CREATE_GUI') {
@@ -76,11 +93,11 @@ function validateAction(rawAction) {
       if (!properties) return null;
       parts.push(properties);
     }
-    return { type: 'CREATE_STRUCTURE', name: cleanText(rawAction.name, 40) || 'ABX_Structure', parts };
+    return { type: 'CREATE_STRUCTURE', name: cleanText(rawAction.name, 40) || 'ABX_Structure', parent: validParent(rawAction.parent, 'Workspace'), parts };
   }
 
   if (rawAction.type === 'CREATE_SCRIPT') {
-    const allowedLocations = new Set(['ServerScriptService', 'StarterPlayerScripts', 'StarterGui', 'Workspace']);
+    const allowedLocations = new Set(['ServerScriptService', 'StarterPlayerScripts', 'StarterCharacterScripts', 'StarterGui', 'Workspace', 'ServerStorage', 'ReplicatedStorage', 'StarterPack']);
     const source = typeof rawAction.source === 'string' ? rawAction.source : '';
     if (!source.trim() || source.length > 10000) return null;
     // Reject common dynamic execution and remote code-loading primitives.
@@ -90,6 +107,54 @@ function validateAction(rawAction) {
       name: cleanText(rawAction.name, 48) || 'ABX_GeneratedScript',
       location: allowedLocations.has(rawAction.location) ? rawAction.location : 'ServerScriptService',
       source
+    };
+  }
+
+  if (rawAction.type === 'CREATE_FOLDER') {
+    return {
+      type: 'CREATE_FOLDER',
+      name: cleanText(rawAction.name, 60) || 'ABX_Folder',
+      parent: validParent(rawAction.parent, 'ReplicatedStorage')
+    };
+  }
+
+  if (rawAction.type === 'CREATE_VALUE') {
+    if (!ALLOWED_VALUE_TYPES.has(rawAction.valueType)) return null;
+    let value = rawAction.value;
+    if (rawAction.valueType === 'StringValue') value = cleanText(value, 500);
+    else if (rawAction.valueType === 'BoolValue') value = Boolean(value);
+    else {
+      value = Number(value);
+      if (!Number.isFinite(value)) return null;
+      value = Math.max(-1000000000, Math.min(1000000000, value));
+      if (rawAction.valueType === 'IntValue') value = Math.trunc(value);
+    }
+    return {
+      type: 'CREATE_VALUE',
+      name: cleanText(rawAction.name, 60) || 'ABX_Value',
+      parent: validParent(rawAction.parent, 'ReplicatedStorage'),
+      valueType: rawAction.valueType,
+      value
+    };
+  }
+
+  if (rawAction.type === 'CREATE_REMOTE') {
+    if (!ALLOWED_REMOTE_TYPES.has(rawAction.remoteType)) return null;
+    return {
+      type: 'CREATE_REMOTE',
+      name: cleanText(rawAction.name, 60) || 'ABX_Remote',
+      parent: validParent(rawAction.parent, 'ReplicatedStorage'),
+      remoteType: rawAction.remoteType
+    };
+  }
+
+  if (rawAction.type === 'CREATE_OBJECT') {
+    if (!ALLOWED_OBJECT_TYPES.has(rawAction.className)) return null;
+    return {
+      type: 'CREATE_OBJECT',
+      name: cleanText(rawAction.name, 60) || ('ABX_' + rawAction.className),
+      parent: validParent(rawAction.parent, 'Workspace'),
+      className: rawAction.className
     };
   }
 
@@ -147,9 +212,9 @@ app.get('/poll/:code', (req, res) => {
   if (sessions[code]) {
     const script = sessions[code].pendingCode;
     sessions[code].pendingCode = null;
-    res.json({ script });
+    res.json({ script, connected: sessions[code].connected });
   } else {
-    res.json({ script: null });
+    res.json({ script: null, connected: false });
   }
 });
 
@@ -197,11 +262,15 @@ FORMATO OBLIGATORIO:
 Devuelve ÚNICAMENTE JSON válido con esta forma exacta: {"reply":"respuesta para el usuario","action":null}. Si hay una acción, coloca el objeto de acción en action. No uses Markdown fuera del JSON ni bloques de código en la respuesta JSON. Solo crea una acción si el usuario pide explícitamente crear, construir, programar, modificar o agregar algo en Roblox Studio. Si pregunta cómo funciona o pide consejos, explica sin ejecutar una acción.
 
 ACCIONES QUE EL PLUGIN ADMITE:
-1. Pieza con propiedades configurables: {"type":"CREATE_PART","name":"ABX_Part","size":[10,1,10],"color":"blue","position":[0,5,0],"rotation":[0,0,0],"shape":"Block","material":"SmoothPlastic","transparency":0,"reflectance":0,"anchored":true,"canCollide":true}. shape acepta Block, Ball, Cylinder, Wedge o CornerWedge. material acepta materiales válidos de Roblox como Neon, Wood, Concrete, Metal, Grass, Sand, Glass, Ice, etc. Usa rotación en grados; transparency y reflectance van de 0 a 1. Respeta anchored/canCollide solicitados.
+1. Pieza configurable: {"type":"CREATE_PART","name":"ABX_Part","parent":"Workspace","size":[10,1,10],"color":"blue","position":[0,5,0],"rotation":[0,0,0],"shape":"Block","material":"SmoothPlastic","transparency":0,"reflectance":0,"anchored":true,"canCollide":true}. parent puede ser Workspace, ReplicatedStorage o ServerStorage; las piezas fuera de Workspace quedan almacenadas y no se ven en el mundo. shape acepta Block, Ball, Cylinder, Wedge o CornerWedge. material acepta materiales válidos de Roblox como Neon, Wood, Concrete, Metal, Grass, Sand, Glass, Ice, etc. Usa rotación en grados; transparency y reflectance van de 0 a 1. Respeta anchored/canCollide solicitados.
 2. UI sencilla estática: {"type":"CREATE_GUI","title":"Mi interfaz"}
-3. Estructura física: {"type":"CREATE_STRUCTURE","name":"Casa","parts":[{"name":"Piso","size":[20,1,20],"position":[0,0,0],"rotation":[0,0,0],"color":"green","shape":"Block","material":"Wood","transparency":0,"reflectance":0,"anchored":true,"canCollide":true}]}. Máximo 60 piezas. Cada pieza admite las mismas propiedades (forma, material, rotación, transparencia, reflectancia, anclaje y colisión). Todas las posiciones son absolutas en Workspace.
-4. Script completo: {"type":"CREATE_SCRIPT","name":"NombreDescriptivo","location":"ServerScriptService","source":"CODIGO LUAU COMPLETO"}. location solo puede ser ServerScriptService, StarterPlayerScripts, StarterGui o Workspace. Usa StarterPlayerScripts para LocalScripts de interfaz, controles y datos que solo ve el jugador; ServerScriptService para lógica autoritativa, monedas, validaciones y eventos globales; Workspace solo si la lógica realmente debe vivir junto al mundo. StarterGui es válido para LocalScripts relacionados con UI, aunque a menudo StarterPlayerScripts facilita crear y gestionar interfaces en PlayerGui.
-5. Plantilla: {"type":"CREATE_SYSTEM","system":"COINS"} o CHECKPOINTS o REBIRTHS. Son plantillas simples, no sistemas avanzados.
+3. Estructura: {"type":"CREATE_STRUCTURE","name":"Casa","parent":"Workspace","parts":[{"name":"Piso","size":[20,1,20],"position":[0,0,0],"rotation":[0,0,0],"color":"green","shape":"Block","material":"Wood","transparency":0,"reflectance":0,"anchored":true,"canCollide":true}]}. Máximo 60 piezas. Cada pieza admite las mismas propiedades (forma, material, rotación, transparencia, reflectancia, anclaje y colisión). Todas las posiciones son absolutas en Workspace.
+4. Script completo: {"type":"CREATE_SCRIPT","name":"NombreDescriptivo","location":"ServerScriptService","source":"CODIGO LUAU COMPLETO"}. location acepta ServerScriptService, StarterPlayerScripts, StarterCharacterScripts, StarterGui, Workspace, ServerStorage, ReplicatedStorage o StarterPack. Un Script guardado en ServerStorage/ReplicatedStorage es una plantilla y no se ejecuta allí. Usa StarterPlayerScripts para LocalScripts de interfaz, controles y datos que solo ve el jugador; ServerScriptService para lógica autoritativa, monedas, validaciones y eventos globales; Workspace solo si la lógica realmente debe vivir junto al mundo. StarterGui es válido para LocalScripts relacionados con UI, aunque a menudo StarterPlayerScripts facilita crear y gestionar interfaces en PlayerGui.
+5. Crear carpeta: {"type":"CREATE_FOLDER","name":"Modules","parent":"ReplicatedStorage"}.
+6. Crear valor: {"type":"CREATE_VALUE","name":"Coins","parent":"ReplicatedStorage","valueType":"IntValue","value":0}. valueType acepta StringValue, BoolValue, IntValue, NumberValue.
+7. Crear remoto: {"type":"CREATE_REMOTE","name":"PurchaseRequest","parent":"ReplicatedStorage","remoteType":"RemoteEvent"}. remoteType acepta RemoteEvent, RemoteFunction, BindableEvent o BindableFunction.
+8. Crear objeto compatible: {"type":"CREATE_OBJECT","name":"Prompt","parent":"Workspace","className":"ProximityPrompt"}. className acepta Folder, Model, Attachment, PointLight, SpotLight, SurfaceLight, Highlight, Smoke, Fire, Sparkles, ClickDetector, ProximityPrompt, SpawnLocation, Seat, VehicleSeat, WeldConstraint, Animation, Sound, ParticleEmitter, Beam o Trail. Estos objetos se crean con propiedades predeterminadas.
+9. Plantilla: {"type":"CREATE_SYSTEM","system":"COINS"} o CHECKPOINTS o REBIRTHS. Son plantillas simples, no sistemas avanzados.
 
 REGLA IMPORTANTE PARA INTERFACES DINÁMICAS:
 La acción CREATE_GUI solo crea una UI de muestra sin lógica. Si el usuario pide un TextLabel que cambie, un contador, una barra, un HUD, un menú con botones funcionales, un indicador de velocidad/vida/monedas, una tienda, una pantalla de victoria o cualquier interfaz con comportamiento, usa CREATE_SCRIPT y genera un LocalScript completo que cree la ScreenGui, los Frames, TextLabels, botones y UICorners por código, y que implemente toda la lógica. Ponlo normalmente en StarterPlayerScripts y crea la GUI en PlayerGui. No entregues únicamente un TextLabel visual si pidieron funcionalidad.
