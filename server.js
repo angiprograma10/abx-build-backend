@@ -141,13 +141,21 @@ function validParent(value, fallback = 'Workspace') {
   return ALLOWED_PARENTS.has(value) ? value : fallback;
 }
 
+function layoutPosition(index, size = [4, 1, 4]) {
+  // Deterministic fallback: never stack unspecified parts at the same origin.
+  const columns = 6;
+  const gap = 3;
+  const x = (index % columns) * (Math.max(4, size[0]) + gap);
+  const z = Math.floor(index / columns) * (Math.max(4, size[2]) + gap);
+  return [x, 5 + Math.max(0, size[1] / 2 - 0.5), z];
+}
+
 function validatePart(raw, defaults = {}) {
   if (!isObject(raw)) return null;
 
   const size = vector3(raw.size, defaults.size || [4, 1, 4], 0.1, 100);
-  const position = vector3(
-    raw.position, defaults.position || [0, 5, 0], -500, 500
-  );
+  const fallbackPosition = defaults.position || [0, 5, 0];
+  const position = vector3(raw.position, fallbackPosition, -500, 500);
   const rotation = vector3(raw.rotation, [0, 0, 0], -360, 360);
 
   if (!size || !position || !rotation) return null;
@@ -198,8 +206,12 @@ function validateTreeNode(node, state, depth = 0) {
       className === 'WedgePart' || className === 'CornerWedgePart' ||
       className === 'SpawnLocation' || className === 'Seat' ||
       className === 'VehicleSeat') {
-    const part = validatePart(node.properties || node, {
-      size: [4, 1, 4], position: [0, 5, 0]
+    const rawPart = node.properties || node;
+    const index = state.partIndex || 0;
+    state.partIndex = index + 1;
+    const safeSize = vector3(rawPart.size, [4, 1, 4], 0.1, 100) || [4, 1, 4];
+    const part = validatePart(rawPart, {
+      size: [4, 1, 4], position: layoutPosition(index, safeSize)
     });
     if (!part) return null;
     result.properties = part;
@@ -281,8 +293,21 @@ function validateAction(raw) {
       if (!Array.isArray(raw.parts) || raw.parts.length < 1 ||
           raw.parts.length > CONFIG.maxStructureParts) return null;
 
-      const parts = raw.parts.map(part => validatePart(part));
+      const parts = raw.parts.map((part, index) => {
+        const safeSize = vector3(part?.size, [4, 1, 4], 0.1, 100) || [4, 1, 4];
+        const fallback = layoutPosition(index, safeSize);
+        return validatePart(part, { position: fallback });
+      });
       if (parts.some(part => !part)) return null;
+
+      // If the model placed every part at the same exact point, repair the
+      // layout deterministically instead of producing a single visible block.
+      const uniquePositions = new Set(parts.map(p => p.position.join(',')));
+      if (parts.length > 1 && uniquePositions.size === 1) {
+        parts.forEach((part, index) => {
+          part.position = layoutPosition(index, part.size);
+        });
+      }
 
       return {
         type: raw.type,
@@ -730,7 +755,7 @@ ESTRUCTURAS:
 Para edificios y mapas estáticos usa CREATE_STRUCTURE cuando quepan
 en 60 piezas. Diseña una silueta reconocible, geometría coherente,
 materiales y colores intencionales, puertas, ventanas y detalles útiles.
-Las posiciones son absolutas. Evita piezas flotantes y solapamientos.
+Las posiciones son absolutas y cada pieza debe tener coordenadas propias, calculadas antes de responder. NUNCA reutilices [0,5,0] ni una misma posición para todas las piezas. Diseña un plano mental con origen, límites, ejes X/Y/Z, medidas y separación; luego asigna coordenadas consistentes a cada componente. Para una casa, por ejemplo, suelo y techo van a distintas alturas; paredes se distribuyen alrededor del perímetro; puertas y ventanas se colocan en la fachada; detalles se sitúan junto al elemento que decoran. Para un mapa, distribuye zonas y caminos a escala y separa mobiliario y vegetación. Mantén piezas que deban tocarse deliberadamente, pero evita que piezas independientes ocupen exactamente el mismo volumen. Evita piezas flotantes y solapamientos accidentales.
 
 INTERFACES:
 CREATE_GUI solo sirve para una GUI de muestra sencilla.
