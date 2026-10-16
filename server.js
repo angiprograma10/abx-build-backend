@@ -887,8 +887,8 @@ COMPROBACIÓN FINAL
 - ¿Las piezas tienen posiciones y proporciones coherentes?
 - ¿La UI usa jerarquía real y tipos de propiedad compatibles?
 - ¿El código separa correctamente cliente/servidor y valida entradas?
-- ¿La respuesta describe honestamente lo que esta única acción puede conseguir?
-Si no se puede representar la petición con honestidad, devuelve action:null y explica el límite.
+- ¿La respuesta describe honestamente lo que puede conseguir el plan completo y sus límites?
+Si no se puede representar la petición con honestidad, devuelve actions:[] y explica el límite.
 
 SALIDA OBLIGATORIA
 Devuelve únicamente JSON válido con la forma {"reply":"respuesta breve, útil y honesta","actions":[]} o {"reply":"resumen breve del plan","actions":[{"type":"..."}]}. Incluye entre 1 y 20 acciones admitidas y ordenadas cuando el usuario pide construir, programar, modificar o reparar. Usa actions:[] para preguntas o consejos sin cambios. No uses la propiedad action en la salida del modelo. Sin Markdown fuera del JSON. Escapa correctamente los strings.
