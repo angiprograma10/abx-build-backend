@@ -8,7 +8,15 @@ app.use(express.json({ limit: '64kb' }));
 const sessions = Object.create(null);
 const MAX_MESSAGE_LENGTH = 2000;
 const ALLOWED_COLORS = new Set([
-  'red', 'blue', 'green', 'yellow', 'black', 'white', 'purple', 'orange'
+  'red', 'blue', 'green', 'yellow', 'black', 'white', 'purple', 'orange',
+  'brown', 'beige', 'tan', 'cream', 'gray', 'grey', 'dark gray', 'dark grey',
+  'light gray', 'light grey', 'dark blue', 'light blue', 'navy blue', 'cyan',
+  'teal', 'turquoise', 'sky blue', 'lime green', 'dark green', 'olive green',
+  'mint', 'pink', 'hot pink', 'magenta', 'coral', 'salmon', 'peach',
+  'red orange', 'maroon', 'burgundy', 'gold', 'gold yellow', 'silver',
+  'dark stone grey', 'medium stone grey', 'light stone grey', 'institutional white',
+  'flint', 'sand red', 'brick yellow', 'earth green', 'pastel brown',
+  'really black', 'really red', 'bright blue', 'bright yellow', 'bright orange'
 ]);
 const ALLOWED_PARENTS = new Set([
   'Workspace', 'ReplicatedStorage', 'ServerStorage', 'ServerScriptService',
