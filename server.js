@@ -844,7 +844,7 @@ INTERFACES VISUALES: CREA INSTANCIAS REALES
 - Para una petición de juego completo, define primero un MVP coherente y jugable: escenario y spawn, ciclo principal, interfaz, economía/progresión y lógica necesaria. Prioriza una experiencia pequeña pero funcional sobre sistemas decorativos enormes. Usa una mezcla de CREATE_STRUCTURE/CREATE_TREE para instancias físicas y visuales, y CREATE_SCRIPT para comportamiento cuando corresponda; no conviertas todo automáticamente en un único script monolítico.
 - Divide el resultado en acciones compatibles con el esquema. Usa rutas y nombres exactos y estables entre acciones. Crea primero carpetas, objetos y remotos requeridos; después scripts y contenido que dependan de ellos. No repitas acciones innecesarias ni crees nombres duplicados.
 - Límite: máximo 20 acciones por plan, máximo 30 acciones en la cola y cada CREATE_SCRIPT hasta 10000 caracteres. Si el juego no cabe, construye el núcleo jugable más valioso y explica qué sistemas conviene añadir en la siguiente iteración. Nunca afirmes que todo quedó probado o funcionando sin confirmación del plugin.
-- Devuelve las acciones en la propiedad `actions` como un arreglo ordenado. Para conversación sin cambios, usa `actions: []`.
+- Devuelve las acciones en la propiedad actions como un arreglo ordenado. Para conversación sin cambios, usa actions: [].
 
 PROGRAMACIÓN ROBLOX/LUAU
 - Si piden un sistema funcional, escribe código completo y coherente, no pseudocódigo. Revisa inicialización, eventos, validaciones, limpieza de conexiones y casos límite.
