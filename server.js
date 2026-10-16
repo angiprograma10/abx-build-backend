@@ -64,7 +64,7 @@ function validateAction(rawAction) {
     const source = typeof rawAction.source === 'string' ? rawAction.source : '';
     if (!source.trim() || source.length > 10000) return null;
     // Reject common dynamic execution and remote code-loading primitives.
-    if (/\\b(loadstring|require\\s*\\(|getfenv|setfenv|HttpService|InsertService)\\b/i.test(source)) return null;
+    if (/\b(loadstring|require\s*\(|getfenv|setfenv|HttpService|InsertService)\b/i.test(source)) return null;
     return {
       type: 'CREATE_SCRIPT',
       name: cleanText(rawAction.name, 48) || 'ABX_GeneratedScript',
