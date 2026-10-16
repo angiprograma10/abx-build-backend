@@ -672,7 +672,7 @@ app.get('/', (_req, res) => {
   res.json({
     ok: true,
     service: 'ABX Build Backend',
-    version: '2.3.0',
+    version: '2.4.0',
     aiConfigured: Boolean(GEMINI_API_KEY),
     features: [
       'session-queue', 'action-validation',
@@ -1069,9 +1069,14 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
       };
     }
 
+    const responseReply = actions.length > 1
+      ? cleanText(reply + ' Plan de ' + actions.length +
+          ' acciones en orden; al confirmar la primera acción, el plugin encolará el plan completo.', 3500)
+      : reply;
+
     return res.json({
       ok: true,
-      reply,
+      reply: responseReply,
       action,
       planCount: actions.length
     });
