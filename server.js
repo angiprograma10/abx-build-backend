@@ -142,12 +142,45 @@ function validParent(value, fallback = 'Workspace') {
 }
 
 function layoutPosition(index, size = [4, 1, 4]) {
-  // Deterministic fallback: never stack unspecified parts at the same origin.
-  const columns = 6;
-  const gap = 3;
-  const x = (index % columns) * (Math.max(4, size[0]) + gap);
-  const z = Math.floor(index / columns) * (Math.max(4, size[2]) + gap);
-  return [x, 5 + Math.max(0, size[1] / 2 - 0.5), z];
+  // Safe fallback for a part whose intended position was omitted.
+  const pitchX = Math.max(12, size[0] + 3);
+  const pitchZ = Math.max(12, size[2] + 3);
+  return [
+    (index % 6) * pitchX,
+    5 + Math.max(0, size[1] / 2 - 0.5),
+    Math.floor(index / 6) * pitchZ
+  ];
+}
+
+function layoutPartsWithoutOverlap(parts) {
+  // Pack parts into a grid using the largest part in each column/row.
+  const columns = Math.min(6, parts.length);
+  const rows = Math.ceil(parts.length / columns);
+  const columnWidths = Array(columns).fill(0);
+  const rowDepths = Array(rows).fill(0);
+  parts.forEach((part, i) => {
+    const col = i % columns;
+    const row = Math.floor(i / columns);
+    columnWidths[col] = Math.max(columnWidths[col], part.size[0]);
+    rowDepths[row] = Math.max(rowDepths[row], part.size[2]);
+  });
+  const columnCenters = [];
+  const rowCenters = [];
+  let cursorX = 0;
+  for (let col = 0; col < columns; col++) {
+    columnCenters[col] = cursorX + columnWidths[col] / 2;
+    cursorX += columnWidths[col] + 3;
+  }
+  let cursorZ = 0;
+  for (let row = 0; row < rows; row++) {
+    rowCenters[row] = cursorZ + rowDepths[row] / 2;
+    cursorZ += rowDepths[row] + 3;
+  }
+  return parts.map((part, i) => [
+    columnCenters[i % columns],
+    5 + Math.max(0, part.size[1] / 2 - 0.5),
+    rowCenters[Math.floor(i / columns)]
+  ]);
 }
 
 function validatePart(raw, defaults = {}) {
@@ -300,13 +333,12 @@ function validateAction(raw) {
       });
       if (parts.some(part => !part)) return null;
 
-      // If the model placed every part at the same exact point, repair the
-      // layout deterministically instead of producing a single visible block.
+      // If all parts were emitted at the same point, separate them using a
+      // size-aware grid so different dimensions do not overlap accidentally.
       const uniquePositions = new Set(parts.map(p => p.position.join(',')));
       if (parts.length > 1 && uniquePositions.size === 1) {
-        parts.forEach((part, index) => {
-          part.position = layoutPosition(index, part.size);
-        });
+        const positions = layoutPartsWithoutOverlap(parts);
+        parts.forEach((part, index) => { part.position = positions[index]; });
       }
 
       return {
