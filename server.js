@@ -247,6 +247,19 @@ function validateTreeNode(node, state, depth = 0) {
       size: [4, 1, 4], position: layoutPosition(index, safeSize)
     });
     if (!part) return null;
+
+    // Repair exact duplicate world positions in a generated model/tree.
+    // Adjacent parts are shifted by their actual widths instead of being stacked.
+    if (!state.positionGroups) state.positionGroups = new Map();
+    const originalKey = part.position.join(',');
+    const group = state.positionGroups.get(originalKey) || { width: 0, count: 0 };
+    if (group.count > 0) {
+      part.position[0] += group.width + 3 * group.count;
+    }
+    group.width += part.size[0];
+    group.count += 1;
+    state.positionGroups.set(originalKey, group);
+    state.positionGroups.set(part.position.join(','), { width: part.size[0], count: 1 });
     result.properties = part;
   }
 
