@@ -186,7 +186,18 @@ Debes crear una acción CREATE_SCRIPT ubicada en StarterPlayerScripts. El source
 Incluye el código completo como string JSON escapado correctamente.
 
 ESTÁNDARES DE CALIDAD:
+- Antes de responder, haz una revisión interna final como si fueras a publicar el código: verifica sintaxis Luau, nombres de variables, cierres de bloques (end), rutas de servicios, tipos de Script/LocalScript, objetos que se crean antes de usarse y todos los casos de personaje/jugador que puede faltar. Corrige cualquier problema detectado antes de devolver el JSON. No muestres esta revisión interna.
 - Genera código Luau real y coherente con las APIs actuales de Roblox. No inventes servicios, propiedades, eventos ni métodos.
+- No confundas las unidades: Vector3 para Size/Position; UDim2 para Size/Position de GUI; Color3 para colores; Enum para propiedades enumeradas. No uses propiedades de GUI en Parts ni propiedades de BasePart en TextLabels.
+- En GUI, usa una jerarquía válida (ScreenGui > Frame > TextLabel/TextButton), Parent explícitos, dimensiones UDim2, colores Color3.fromRGB, texto legible y ZIndex consistente cuando haya capas. Configura TextScaled o TextSize de forma deliberada y evita que texto importante quede cortado.
+- Para botones funcionales, conecta Activated o MouseButton1Click y define qué ocurre. No inventes botones decorativos que aparenten funcionar. Desconecta eventos o evita conexiones repetidas cuando el ciclo de vida lo requiera.
+- Para estructuras, piensa la geometría antes de generar piezas: calcula posiciones relativas de paredes, piso, techo y soportes para que encajen, evita piezas flotantes o superpuestas accidentalmente, usa nombres únicos y no excedas el límite. Recuerda que las posiciones de esta acción son coordenadas absolutas de Workspace.
+- Para valores dinámicos, usa la fuente real del dato y maneja valores nil. Si se pide velocidad, lee Humanoid.WalkSpeed; si se piden monedas, usa el sistema de datos realmente disponible y no inventes una variable que nunca se crea.
+- No declares que un sistema es persistente si no usa DataStore correctamente; no prometas multijugador seguro si la lógica de recompensas corre solo en cliente. Si el sistema necesita RemoteEvents, scripts de servidor y cliente, o DataStore y la herramienta no puede instalarlos juntos, dilo claramente en reply en lugar de entregar una falsa solución completa.
+- En código de servidor, valida cualquier acción que afecte monedas, compras, daño, progreso o recompensas. El cliente puede solicitar; el servidor debe comprobar y decidir.
+- Mantén la respuesta JSON estrictamente válida: escapa comillas y saltos de línea dentro de source; no incluyas comentarios ni texto fuera del JSON; no agregues campos que el plugin no admite.
+- Si la petición incluye muchos componentes o una mecánica compleja, reduce el alcance a una primera versión funcional y explica qué queda fuera. Prioriza que funcione y pueda probarse antes que añadir adornos.
+- No generes acciones por mera conversación, preguntas o consejos; la confirmación manual del usuario en Studio sigue siendo obligatoria.
 - Decide entre Script y LocalScript según el contexto. No pongas Players.LocalPlayer en un Script de servidor. No pongas lógica autoritativa de monedas o recompensas solo en el cliente.
 - Para UI profesional, usa jerarquía clara, nombres descriptivos, UICorner, UIPadding, UIStroke cuando proceda, buen contraste, tamaños y posiciones adaptables cuando sea posible, y textos concisos. No sobrecargues de efectos.
 - Para valores en vivo, usa eventos apropiados como CharacterAdded, Humanoid.Died, GetPropertyChangedSignal cuando convenga y un ciclo de actualización moderado si el requisito lo pide.
@@ -247,8 +258,23 @@ Cuando prepares una acción, resume de forma breve qué hará y dónde se instal
       return res.status(502).json({ error: 'La respuesta de Gemini no tuvo el formato esperado. Inténtalo otra vez.' });
     }
 
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return res.status(502).json({ error: 'Gemini devolvió una respuesta con estructura incorrecta. Inténtalo otra vez.' });
+    }
+
     const reply = cleanText(parsed.reply, 3000) || 'No pude preparar una respuesta. Inténtalo de nuevo.';
     const action = validateAction(parsed.action);
+
+    // Never silently present an invalid generated action as if it were ready.
+    if (parsed.action !== null && parsed.action !== undefined && !action) {
+      console.warn('Gemini action rejected by validation. Type:', cleanText(parsed.action?.type, 40));
+      return res.json({
+        ok: true,
+        reply: 'La propuesta generada no pasó las comprobaciones de seguridad y formato, así que no la enviaré a Roblox Studio. Intenta dividir la petición en pasos más pequeños o especificar mejor lo que debe crear.',
+        action: null
+      });
+    }
+
     res.json({ ok: true, reply, action });
   } catch (error) {
     if (error.name === 'AbortError') {
