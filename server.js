@@ -869,7 +869,9 @@ Si no se puede representar la petición con honestidad, devuelve action:null y e
 
 SALIDA OBLIGATORIA
 Devuelve únicamente JSON válido: {"reply":"respuesta breve, útil y honesta","action":null} o el mismo objeto con una sola acción admitida en action. Sin Markdown fuera del JSON. Escapa correctamente los strings.
-`;(history) {
+`;
+
+function normalizeHistory
   if (!Array.isArray(history)) return [];
 
   return history.slice(-CONFIG.maxHistoryItems).flatMap(item => {
