@@ -73,7 +73,7 @@ const OBJECT_TYPES = new Set([
 ]);
 
 const SHAPES = new Set([
-  'Block', 'Ball', 'Cylinder', 'Wedge', 'CornerWedge'
+  'Block', 'Ball', 'Cylinder', 'Wedge', 'CornerWedge', 'Truss', 'Mesh'
 ]);
 
 const MATERIALS = new Set([
@@ -379,43 +379,65 @@ function validateAction(raw) {
       return {
         type: raw.type,
         parent: validParent(raw.parent),
+        root: tree,
         tree
       };
     }
 
     case 'SET_PROPERTIES': {
-      const path = validPath(raw.path);
+      const path = validPath(raw.path || raw.target);
       if (!path || !isObject(raw.properties)) return null;
-
-      const properties = {};
+      const entries = [];
       const allowed = new Set([
-        'Name', 'Anchored', 'CanCollide', 'CanTouch', 'CanQuery',
-        'Transparency', 'Reflectance', 'Material', 'Shape',
-        'Size', 'Position', 'Orientation', 'Color',
-        'BrickColor', 'WalkSpeed', 'JumpPower', 'JumpHeight',
-        'MaxHealth', 'Health', 'Enabled', 'Value',
-        'Text', 'TextSize', 'TextTransparency', 'TextWrapped',
-        'TextScaled', 'BackgroundTransparency', 'Visible',
-        'DisplayOrder', 'ResetOnSpawn', 'IgnoreGuiInset',
-        'Image', 'ImageTransparency', 'Rotation', 'ZIndex',
-        'AutomaticSize', 'BorderSizePixel', 'LayoutOrder',
-        'Brightness', 'Range', 'Angle', 'Volume', 'PlaybackSpeed'
+        'Name','Anchored','CanCollide','CanTouch','CanQuery','Transparency',
+        'Reflectance','Material','Shape','Size','Position','Orientation','Color',
+        'BrickColor','WalkSpeed','JumpPower','JumpHeight','MaxHealth','Health',
+        'Enabled','Value','Text','TextSize','TextTransparency','TextWrapped',
+        'TextScaled','BackgroundTransparency','Visible','DisplayOrder','ResetOnSpawn',
+        'IgnoreGuiInset','Image','ImageTransparency','Rotation','ZIndex','AutomaticSize',
+        'BorderSizePixel','LayoutOrder','Brightness','Range','Angle','Volume','PlaybackSpeed',
+        'TextColor3','BackgroundColor3','ImageColor3','AnchorPoint','CanvasSize',
+        'ScrollBarThickness','FillDirection','HorizontalAlignment','VerticalAlignment',
+        'CellSize','CellPadding','CornerRadius','Thickness','RichText','Font',
+        'MaxVisibleGraphemes'
       ]);
-
-      for (const [key, value] of Object.entries(raw.properties)) {
-        if (!allowed.has(key)) continue;
-        if (typeof value === 'string') properties[key] = value.slice(0, 500);
-        else if (typeof value === 'boolean') properties[key] = value;
-        else if (typeof value === 'number' && Number.isFinite(value)) {
-          properties[key] = value;
-        } else if (Array.isArray(value) && value.length <= 3 &&
-                   value.every(n => Number.isFinite(Number(n)))) {
-          properties[key] = value.map(Number);
-        }
+      const enumProperties = {
+        Material:'Material', Shape:'PartType', Font:'Font', AutomaticSize:'AutomaticSize',
+        FillDirection:'FillDirection', HorizontalAlignment:'HorizontalAlignment',
+        VerticalAlignment:'VerticalAlignment'
+      };
+      const colorProperties = new Set(['Color','TextColor3','BackgroundColor3','ImageColor3']);
+      const supportedKinds = new Set(['raw','UDim2','UDim','Vector2','Vector3','Color3','BrickColor','Enum','CFrame']);
+      for (const [name, rawValue] of Object.entries(raw.properties)) {
+        if (!allowed.has(name)) continue;
+        let value = rawValue;
+        let kind = 'raw';
+        if (isObject(rawValue) && Object.prototype.hasOwnProperty.call(rawValue,'value')) {
+          value = rawValue.value;
+          kind = cleanText(rawValue.kind,30) || 'raw';
+          if (!supportedKinds.has(kind)) continue;
+          if (kind === 'Enum' && (!isObject(value) || typeof value.enum !== 'string' || typeof value.name !== 'string')) continue;
+        } else if (colorProperties.has(name)) {
+          if (typeof value === 'string' && COLORS.has(value)) kind = 'BrickColor';
+          else if (Array.isArray(value) && value.length === 3 && value.every(n => Number.isFinite(Number(n)))) {
+            value = value.map(n => Math.max(0,Math.min(255,Number(n)))); kind = 'Color3';
+          } else continue;
+        } else if (['Size','Position','Orientation','AnchorPoint','CanvasSize','CellSize','CellPadding'].includes(name)) {
+          if (!Array.isArray(value) || ![2,3,4].includes(value.length) || !value.every(n => Number.isFinite(Number(n)))) continue;
+          kind = value.length === 4 ? 'UDim2' : value.length === 2 ? 'Vector2' : 'Vector3';
+          value = value.map(Number);
+        } else if (enumProperties[name]) {
+          if (typeof value !== 'string') continue;
+          value = {enum:enumProperties[name],name:value}; kind = 'Enum';
+        } else if (typeof value === 'string') {
+          value = value.slice(0,500);
+        } else if (typeof value === 'number' && Number.isFinite(value)) {
+          value = Math.max(-1e9,Math.min(1e9,value));
+        } else if (typeof value !== 'boolean') continue;
+        entries.push({name,value,kind});
       }
-
-      if (!Object.keys(properties).length) return null;
-      return { type: raw.type, path, properties };
+      if (!entries.length) return null;
+      return {type:raw.type,target:path,path,properties:entries};
     }
 
     case 'SET_ATTRIBUTE': {
@@ -428,7 +450,7 @@ function validateAction(raw) {
 
       if (!path || !name || !supported) return null;
       return {
-        type: raw.type, path, attribute: name,
+        type: raw.type, path, target: path, attribute: name,
         value: typeof value === 'string' ? value.slice(0, 500) : value
       };
     }
@@ -436,7 +458,7 @@ function validateAction(raw) {
     case 'DELETE_INSTANCE': {
       const path = validPath(raw.path);
       if (!path || ['Workspace', 'game', 'DataModel'].includes(path)) return null;
-      return { type: raw.type, path };
+      return { type: raw.type, path, target: path };
     }
 
     case 'MOVE_INSTANCE': {
@@ -457,7 +479,7 @@ function validateAction(raw) {
 
     case 'INSPECT_PATH': {
       const path = validPath(raw.path);
-      return path ? { type: raw.type, path } : null;
+      return path ? { type: raw.type, path, target: path } : null;
     }
 
     case 'FIND_INSTANCES': {
@@ -735,8 +757,8 @@ CREATE_VALUE: {type,name,parent,valueType,value}
 CREATE_REMOTE: {type,name,parent,remoteType}
 CREATE_OBJECT: {type,name,parent,className}
 CREATE_SYSTEM: {type,system} con COINS, CHECKPOINTS o REBIRTHS.
-CREATE_TREE: {type,parent,tree:{name,className,properties?,children?}}
-SET_PROPERTIES: {type,path,properties}
+CREATE_TREE: {type,parent,root:{name,className,properties?,children?}}
+SET_PROPERTIES: {type,path,properties}; properties puede usar valores simples o {value,kind}, donde kind admite UDim2, UDim, Vector2, Vector3, Color3, BrickColor, Enum, CFrame o raw
 SET_ATTRIBUTE: {type,path,attribute,value}
 DELETE_INSTANCE: {type,path}
 MOVE_INSTANCE: {type,path,parentPath}
