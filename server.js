@@ -15,23 +15,49 @@ function cleanText(value, maxLength = 500) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
 
+const ALLOWED_SHAPES = new Set(['Block', 'Ball', 'Cylinder', 'Wedge', 'CornerWedge']);
+const ALLOWED_MATERIALS = new Set([
+  'Plastic', 'SmoothPlastic', 'Neon', 'Wood', 'WoodPlanks', 'Concrete',
+  'Brick', 'Cobblestone', 'Metal', 'DiamondPlate', 'Foil', 'CorrodedMetal',
+  'Grass', 'Ground', 'Sand', 'Fabric', 'Glass', 'Marble', 'Granite',
+  'Slate', 'Rock', 'Ice', 'Snow', 'Asphalt', 'Basalt', 'Limestone',
+  'Pavement', 'Salt', 'Sandstone', 'Mud', 'LeafyGrass', 'Water'
+]);
+
+function vector3(value, fallback, min, max) {
+  const vector = Array.isArray(value) ? value.slice(0, 3).map(Number) : fallback;
+  if (!Array.isArray(vector) || vector.length !== 3 || !vector.every(Number.isFinite)) return null;
+  return vector.map(n => Math.max(min, Math.min(max, n)));
+}
+
+function validatePartProperties(raw, sizeFallback, positionFallback) {
+  const size = vector3(raw.size, sizeFallback, 0.5, 100);
+  const position = vector3(raw.position, positionFallback, -500, 500);
+  const rotation = vector3(raw.rotation, [0, 0, 0], -360, 360);
+  if (!size || !position || !rotation) return null;
+
+  return {
+    name: cleanText(raw.name, 40) || 'ABX_Part',
+    size,
+    position,
+    rotation,
+    color: ALLOWED_COLORS.has(raw.color) ? raw.color : 'blue',
+    shape: ALLOWED_SHAPES.has(raw.shape) ? raw.shape : 'Block',
+    material: ALLOWED_MATERIALS.has(raw.material) ? raw.material : 'SmoothPlastic',
+    transparency: Number.isFinite(Number(raw.transparency)) ? Math.max(0, Math.min(1, Number(raw.transparency))) : 0,
+    reflectance: Number.isFinite(Number(raw.reflectance)) ? Math.max(0, Math.min(1, Number(raw.reflectance))) : 0,
+    anchored: typeof raw.anchored === 'boolean' ? raw.anchored : true,
+    canCollide: typeof raw.canCollide === 'boolean' ? raw.canCollide : true
+  };
+}
+
 function validateAction(rawAction) {
   if (!rawAction || typeof rawAction !== 'object' || Array.isArray(rawAction)) return null;
 
   if (rawAction.type === 'CREATE_PART') {
-    const size = Array.isArray(rawAction.size) ? rawAction.size.slice(0, 3).map(Number) : [];
-    const position = Array.isArray(rawAction.position) ? rawAction.position.slice(0, 3).map(Number) : [0, 5, 0];
-    if (size.length !== 3 || position.length !== 3) return null;
-    if (![...size, ...position].every(Number.isFinite)) return null;
-
-    return {
-      type: 'CREATE_PART',
-      name: cleanText(rawAction.name, 40) || 'ABX_Part',
-      size: size.map(n => Math.max(0.5, Math.min(100, n))),
-      position: position.map(n => Math.max(-500, Math.min(500, n))),
-      color: ALLOWED_COLORS.has(rawAction.color) ? rawAction.color : 'blue',
-      anchored: true
-    };
+    const properties = validatePartProperties(rawAction, [1, 1, 1], [0, 5, 0]);
+    if (!properties) return null;
+    return { type: 'CREATE_PART', ...properties };
   }
 
   if (rawAction.type === 'CREATE_GUI') {
@@ -46,15 +72,9 @@ function validateAction(rawAction) {
     const parts = [];
     for (const item of rawAction.parts) {
       if (!item || typeof item !== 'object') return null;
-      const size = Array.isArray(item.size) ? item.size.slice(0, 3).map(Number) : [];
-      const position = Array.isArray(item.position) ? item.position.slice(0, 3).map(Number) : [];
-      if (size.length !== 3 || position.length !== 3 || ![...size, ...position].every(Number.isFinite)) return null;
-      parts.push({
-        name: cleanText(item.name, 40) || 'ABX_Part',
-        size: size.map(n => Math.max(1, Math.min(100, n))),
-        position: position.map(n => Math.max(-500, Math.min(500, n))),
-        color: ALLOWED_COLORS.has(item.color) ? item.color : 'blue'
-      });
+      const properties = validatePartProperties(item, [4, 1, 4], [0, 5, 0]);
+      if (!properties) return null;
+      parts.push(properties);
     }
     return { type: 'CREATE_STRUCTURE', name: cleanText(rawAction.name, 40) || 'ABX_Structure', parts };
   }
@@ -177,9 +197,9 @@ FORMATO OBLIGATORIO:
 Devuelve ÚNICAMENTE JSON válido con esta forma exacta: {"reply":"respuesta para el usuario","action":null}. Si hay una acción, coloca el objeto de acción en action. No uses Markdown fuera del JSON ni bloques de código en la respuesta JSON. Solo crea una acción si el usuario pide explícitamente crear, construir, programar, modificar o agregar algo en Roblox Studio. Si pregunta cómo funciona o pide consejos, explica sin ejecutar una acción.
 
 ACCIONES QUE EL PLUGIN ADMITE:
-1. Part: {"type":"CREATE_PART","name":"ABX_Part","size":[10,1,10],"color":"blue","position":[0,5,0],"anchored":true}
+1. Pieza con propiedades configurables: {"type":"CREATE_PART","name":"ABX_Part","size":[10,1,10],"color":"blue","position":[0,5,0],"rotation":[0,0,0],"shape":"Block","material":"SmoothPlastic","transparency":0,"reflectance":0,"anchored":true,"canCollide":true}. shape acepta Block, Ball, Cylinder, Wedge o CornerWedge. material acepta materiales válidos de Roblox como Neon, Wood, Concrete, Metal, Grass, Sand, Glass, Ice, etc. Usa rotación en grados; transparency y reflectance van de 0 a 1. Respeta anchored/canCollide solicitados.
 2. UI sencilla estática: {"type":"CREATE_GUI","title":"Mi interfaz"}
-3. Estructura física: {"type":"CREATE_STRUCTURE","name":"Casa","parts":[{"name":"Piso","size":[20,1,20],"position":[0,0,0],"color":"green"}]}. Máximo 60 piezas. Todas las posiciones son absolutas en Workspace.
+3. Estructura física: {"type":"CREATE_STRUCTURE","name":"Casa","parts":[{"name":"Piso","size":[20,1,20],"position":[0,0,0],"rotation":[0,0,0],"color":"green","shape":"Block","material":"Wood","transparency":0,"reflectance":0,"anchored":true,"canCollide":true}]}. Máximo 60 piezas. Cada pieza admite las mismas propiedades (forma, material, rotación, transparencia, reflectancia, anclaje y colisión). Todas las posiciones son absolutas en Workspace.
 4. Script completo: {"type":"CREATE_SCRIPT","name":"NombreDescriptivo","location":"ServerScriptService","source":"CODIGO LUAU COMPLETO"}. location solo puede ser ServerScriptService, StarterPlayerScripts, StarterGui o Workspace. Usa StarterPlayerScripts para LocalScripts de interfaz, controles y datos que solo ve el jugador; ServerScriptService para lógica autoritativa, monedas, validaciones y eventos globales; Workspace solo si la lógica realmente debe vivir junto al mundo. StarterGui es válido para LocalScripts relacionados con UI, aunque a menudo StarterPlayerScripts facilita crear y gestionar interfaces en PlayerGui.
 5. Plantilla: {"type":"CREATE_SYSTEM","system":"COINS"} o CHECKPOINTS o REBIRTHS. Son plantillas simples, no sistemas avanzados.
 
