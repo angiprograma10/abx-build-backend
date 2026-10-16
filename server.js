@@ -251,15 +251,19 @@ function validateTreeNode(node, state, depth = 0) {
     // Repair exact duplicate world positions in a generated model/tree.
     // Adjacent parts are shifted by their actual widths instead of being stacked.
     if (!state.positionGroups) state.positionGroups = new Map();
+    if (!state.usedPositions) state.usedPositions = new Set();
     const originalKey = part.position.join(',');
     const group = state.positionGroups.get(originalKey) || { width: 0, count: 0 };
     if (group.count > 0) {
       part.position[0] += group.width + 3 * group.count;
+      while (state.usedPositions.has(part.position.join(','))) {
+        part.position[0] += part.size[0] + 3;
+      }
     }
     group.width += part.size[0];
     group.count += 1;
     state.positionGroups.set(originalKey, group);
-    state.positionGroups.set(part.position.join(','), { width: part.size[0], count: 1 });
+    state.usedPositions.add(part.position.join(','));
     result.properties = part;
   }
 
