@@ -22,6 +22,8 @@ const CONFIG = Object.freeze({
   geminiTimeoutMs: 30000,
   sessionTtlMs: 6 * 60 * 60 * 1000,
   maxQueuedActions: 30,
+  maxPlanActions: 20,
+  pendingPlanTtlMs: 3 * 60 * 1000,
   maxActionPayload: 100000,
   maxScriptLength: 10000,
   maxTreeNodes: 300,
@@ -625,6 +627,7 @@ function makeSession() {
     createdAt: Date.now(),
     lastSeen: Date.now(),
     queue: [],
+    pendingPlan: null,
     lastPollAt: 0,
     chatBusy: false
   };
@@ -751,22 +754,38 @@ app.post('/send', rateLimit(60), (req, res) => {
     });
   }
 
-  if (session.queue.length >= CONFIG.maxQueuedActions) {
+  let actionsToQueue = [action];
+  const pendingPlan = session.pendingPlan;
+  const planIsFresh = pendingPlan &&
+    Date.now() - pendingPlan.createdAt <= CONFIG.pendingPlanTtlMs;
+  const matchesPlanStart = planIsFresh &&
+    JSON.stringify(action) === JSON.stringify(pendingPlan.actions[0]);
+
+  // A multi-action plan is committed only after the plugin sends its first
+  // approved action. This preserves the existing plugin confirmation flow.
+  if (matchesPlanStart) actionsToQueue = pendingPlan.actions;
+
+  if (session.queue.length + actionsToQueue.length > CONFIG.maxQueuedActions) {
     return res.status(429).json({
       ok: false,
-      error: 'La cola está llena. Aplica las acciones pendientes primero.'
+      error: 'El plan supera el espacio disponible en la cola. Aplica las acciones pendientes e inténtalo otra vez.'
     });
   }
 
-  session.queue.push({
-    id: crypto.randomUUID(),
-    createdAt: Date.now(),
-    action
-  });
+  if (matchesPlanStart) session.pendingPlan = null;
+
+  for (const queuedAction of actionsToQueue) {
+    session.queue.push({
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+      action: queuedAction
+    });
+  }
 
   res.json({
     ok: true,
     queued: true,
+    queuedActions: actionsToQueue.length,
     queueLength: session.queue.length
   });
 });
@@ -821,7 +840,11 @@ INTERFACES VISUALES: CREA INSTANCIAS REALES
 - Usa UICorner, UIStroke, UIPadding, UIListLayout, UIGridLayout, UIScale o UIAspectRatioConstraint cuando aporten valor. Ten en cuenta móvil y escritorio.
 - Usa nombres estables y claros. No inventes IDs de imágenes o assets; si no hay asset válido, diseña sin depender de él.
 - Distingue apariencia y comportamiento. Si piden botones funcionales, tienda, inventario, validación o menús interactivos, se necesita lógica además del árbol visual.
-- Esta API acepta solo una acción por turno. Si hacen falta tanto la UI como un script, selecciona la parte más útil para este turno, indícalo honestamente y conserva el contexto para continuar; nunca simules una lista de acciones ejecutadas.
+- Puedes proponer un plan ordenado de varias acciones en una sola solicitud. Cada acción debe ser válida por sí misma y depender, en lo posible, de objetos creados en acciones anteriores. La cola del plugin ejecuta las acciones una por una y en orden; no presupongas que una acción terminó con éxito solo porque fue encolada.
+- Para una petición de juego completo, define primero un MVP coherente y jugable: escenario y spawn, ciclo principal, interfaz, economía/progresión y lógica necesaria. Prioriza una experiencia pequeña pero funcional sobre sistemas decorativos enormes. Usa una mezcla de CREATE_STRUCTURE/CREATE_TREE para instancias físicas y visuales, y CREATE_SCRIPT para comportamiento cuando corresponda; no conviertas todo automáticamente en un único script monolítico.
+- Divide el resultado en acciones compatibles con el esquema. Usa rutas y nombres exactos y estables entre acciones. Crea primero carpetas, objetos y remotos requeridos; después scripts y contenido que dependan de ellos. No repitas acciones innecesarias ni crees nombres duplicados.
+- Límite: máximo 20 acciones por plan, máximo 30 acciones en la cola y cada CREATE_SCRIPT hasta 10000 caracteres. Si el juego no cabe, construye el núcleo jugable más valioso y explica qué sistemas conviene añadir en la siguiente iteración. Nunca afirmes que todo quedó probado o funcionando sin confirmación del plugin.
+- Devuelve las acciones en la propiedad `actions` como un arreglo ordenado. Para conversación sin cambios, usa `actions: []`.
 
 PROGRAMACIÓN ROBLOX/LUAU
 - Si piden un sistema funcional, escribe código completo y coherente, no pseudocódigo. Revisa inicialización, eventos, validaciones, limpieza de conexiones y casos límite.
@@ -868,7 +891,7 @@ COMPROBACIÓN FINAL
 Si no se puede representar la petición con honestidad, devuelve action:null y explica el límite.
 
 SALIDA OBLIGATORIA
-Devuelve únicamente JSON válido: {"reply":"respuesta breve, útil y honesta","action":null} o el mismo objeto con una sola acción admitida en action. Sin Markdown fuera del JSON. Escapa correctamente los strings.
+Devuelve únicamente JSON válido con la forma {"reply":"respuesta breve, útil y honesta","actions":[]} o {"reply":"resumen breve del plan","actions":[{"type":"..."}]}. Incluye entre 1 y 20 acciones admitidas y ordenadas cuando el usuario pide construir, programar, modificar o reparar. Usa actions:[] para preguntas o consejos sin cambios. No uses la propiedad action en la salida del modelo. Sin Markdown fuera del JSON. Escapa correctamente los strings.
 `;
 
 function normalizeHistory(history) {
@@ -943,6 +966,8 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   );
 
   session.chatBusy = true;
+  // Prevent a previous unconfirmed plan from being applied by a later prompt.
+  session.pendingPlan = null;
 
   try {
     const response = await fetch(
@@ -994,22 +1019,62 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     const reply = cleanText(parsed.reply, 3500) ||
       'No pude preparar una respuesta útil. Inténtalo otra vez.';
 
-    let action = null;
-    if (parsed.action !== null && parsed.action !== undefined) {
-      action = validateAction(parsed.action);
-
-      if (!action) {
-        console.warn('Acción de Gemini rechazada:',
-          cleanText(parsed.action?.type, 60));
+    // Accept a complete ordered plan while preserving compatibility with older
+    // prompts that return a single "action".
+    let proposedActions;
+    if (Array.isArray(parsed.actions)) {
+      if (parsed.actions.length > CONFIG.maxPlanActions) {
         return res.json({
           ok: true,
-          reply: 'La acción propuesta no superó las validaciones. No se enviará a Studio. Intenta dividir la petición en pasos más pequeños.',
+          reply: 'El plan propuesto excede el límite de acciones por solicitud. Divide el juego en una versión inicial y mejoras.',
           action: null
         });
       }
+      proposedActions = parsed.actions;
+    } else if (parsed.action !== null && parsed.action !== undefined) {
+      proposedActions = [parsed.action];
+    } else {
+      proposedActions = [];
     }
 
-    return res.json({ ok: true, reply, action });
+    const actions = [];
+    for (const proposed of proposedActions) {
+      const validated = validateAction(proposed);
+      if (!validated) {
+        console.warn('Acción del plan rechazada:',
+          cleanText(proposed?.type, 60));
+        session.pendingPlan = null;
+        return res.json({
+          ok: true,
+          reply: 'Una acción del plan no superó las validaciones. No se ejecutará ninguna parte del plan. Intenta reducir el alcance o dividirlo en etapas.',
+          action: null
+        });
+      }
+      actions.push(validated);
+    }
+
+    if (actions.length > CONFIG.maxQueuedActions) {
+      return res.json({
+        ok: true,
+        reply: 'El plan es demasiado grande para ejecutarse de forma segura en una sola solicitud. Reduce el alcance inicial.',
+        action: null
+      });
+    }
+
+    const action = actions[0] || null;
+    if (actions.length > 1) {
+      session.pendingPlan = {
+        createdAt: Date.now(),
+        actions
+      };
+    }
+
+    return res.json({
+      ok: true,
+      reply,
+      action,
+      planCount: actions.length
+    });
   } catch (error) {
     if (error.name === 'AbortError') {
       return res.status(504).json({
