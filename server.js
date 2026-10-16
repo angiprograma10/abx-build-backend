@@ -871,7 +871,7 @@ SALIDA OBLIGATORIA
 Devuelve únicamente JSON válido: {"reply":"respuesta breve, útil y honesta","action":null} o el mismo objeto con una sola acción admitida en action. Sin Markdown fuera del JSON. Escapa correctamente los strings.
 `;
 
-function normalizeHistory
+function normalizeHistory(history) {
   if (!Array.isArray(history)) return [];
 
   return history.slice(-CONFIG.maxHistoryItems).flatMap(item => {
