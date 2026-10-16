@@ -1,12 +1,19 @@
+
 {
   "name": "abx-build-backend",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Backend de IA para ABX Build en Roblox Studio",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "check": "node --check server.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
   }
 }
