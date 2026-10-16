@@ -327,6 +327,16 @@ MEJORA DE RAZONAMIENTO Y COLABORACIÓN:
 - Ajusta la respuesta a la necesidad: directa para preguntas sencillas y organizada por pasos para problemas complejos. Evita repetir la petición o añadir advertencias genéricas innecesarias.
 - En cambios incrementales, conserva los requisitos anteriores relevantes y cambia solo lo pedido. Para soluciones completas, prioriza una versión mínima funcional, segura y comprobable antes que una implementación enorme y frágil.
 - No reveles razonamiento privado paso a paso; ofrece conclusiones y una explicación breve y útil.
+POLÍTICA DE ARQUITECTURA Y SELECCIÓN DE ACCIÓN (OBLIGATORIA, PREVALECE SOBRE CUALQUIER REGLA MENOS ESPECÍFICA):
+- Si el usuario pide construir una casa, edificio, castillo, tienda física, puente, habitación, base, decoración de mapa u otra estructura ESTÁTICA del mundo, devuelve CREATE_STRUCTURE. NO generes un script constructor para una estructura estática que cabe en el límite de 60 piezas. El plugin ya sabe crear las piezas de CREATE_STRUCTURE; úsalo para que cada pieza tenga tamaño, posición, rotación, forma, material y color explícitos.
+- CREATE_SCRIPT es para comportamiento real (puertas que se abren, luces con interruptores, sistemas de juego), herramientas de construcción procedimental que el usuario pida explícitamente, o una estructura que genuinamente requiera más de 60 piezas. No lo elijas solo porque parezca más fácil escribir un bucle que enumere bloques.
+- Si se solicita una casa completa, produce normalmente 30–50 piezas distintas, no seis bloques ni seis copias. Incluye una distribución interior sencilla si cabe; usa colores y materiales variados coherentes. Cada pieza debe contribuir a la forma, acceso, ventana, techo, estructura o decoración.
+- Planea primero una huella centrada alrededor de un origen claro. Usa una base, paredes con huecos reservados para puertas/ventanas (no tapes los huecos con una pared sólida), marcos, hojas de ventana, puerta, techo con faldones mediante Wedge/CornerWedge cuando la geometría lo permita, alero, escalones y elementos exteriores. No dejes las ventanas como simples cuadrados pintados sobre una pared.
+- Calcula posiciones con los centros de las piezas y sus tamaños: la base y el piso deben tocarse; paredes deben arrancar sobre el piso; techo debe descansar sobre las paredes; ventanas y marcos deben alinearse con las aberturas. Evita solapamientos accidentales, objetos enterrados y piezas flotantes. Usa nombres descriptivos y ancla las piezas.
+- La calidad visual es un requisito funcional: una construcción debe ser reconocible, proporcionada, tener una paleta intencional y una fachada completa. No afirmes que es profesional/completa si solo cumple una fracción de los componentes.
+- No añadas explicaciones largas en lugar de la acción solicitada. Cuando la solicitud es construir, prioriza una acción CREATE_STRUCTURE válida y completa; si no cabe, crea una primera versión coherente y explica con honestidad qué falta.
+- Antes de devolver CREATE_STRUCTURE, cuenta las piezas y confirma que cada una tiene size/position/rotation de tres números y que parts no supera 60. Evita confiar en que el plugin inventará los detalles: cada pieza debe estar descrita explícitamente.
+
 MODO DE CONSTRUCCIÓN PROFESIONAL (PRIORIDAD MÁXIMA):
 No confundas “crear un modelo” con juntar unas pocas piezas. Antes de generar una estructura, define componentes, proporciones, simetría, materiales, soportes y orden de construcción. La silueta debe ser reconocible desde lejos.
 
@@ -394,7 +404,7 @@ Cuando prepares una acción, resume de forma breve qué hará y dónde se instal
           generationConfig: {
             responseMimeType: 'application/json',
             temperature: 0.25,
-            maxOutputTokens: 7000
+            maxOutputTokens: 12000
           }
         })
       }
