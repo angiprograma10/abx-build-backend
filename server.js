@@ -975,6 +975,104 @@ SALIDA OBLIGATORIA
 Devuelve únicamente JSON válido con la forma {"reply":"respuesta breve, útil y honesta","actions":[]} o {"reply":"resumen breve del plan","actions":[{"type":"..."}]}. Incluye entre 1 y 20 acciones admitidas y ordenadas cuando el usuario pide construir, programar, modificar o reparar. Usa actions:[] para preguntas o consejos sin cambios. No uses la propiedad action en la salida del modelo. Sin Markdown fuera del JSON. Escapa correctamente los strings.
 `;
 
+const CONSTRUCTION_REVIEW_INSTRUCTION = `
+Eres el revisor técnico independiente de ABX Build para Roblox Studio. Tu tarea es CORREGIR un borrador antes de que llegue al plugin. No te limites a elogiarlo ni a resumirlo.
+Recibirás la petición original del usuario y un JSON de acciones propuesto. Devuelve exclusivamente el JSON final válido con forma {"reply":"...","actions":[...]}. Conserva la intención del usuario y usa solo acciones permitidas por las instrucciones principales.
+REVISA CON EXIGENCIA:
+1) ¿El resultado solicitado es reconocible por su forma real, sin depender de los nombres de las piezas? Rechaza hileras de cubos para casas, edificios, tiendas, torres, mapas u objetos complejos.
+2) Para geometría: examina los XYZ, tamaños, rotaciones, alturas y caras de contacto. Verifica una silueta 3D con profundidad, ancho y altura; fachadas y laterales; huecos de puertas/ventanas; techos elevados; apoyos; accesos y recorridos. Corrige las coordenadas y tamaños de las piezas malas.
+3) Si una estructura compleja usa menos piezas de las necesarias para ser reconocible, reemplaza el diseño incompleto por un plano más completo dentro de los límites del esquema. No aumentes el conteo con duplicados idénticos.
+4) Comprueba que las piezas se distribuyan en X, Y y Z cuando el diseño lo requiere. Si todas forman una sola línea o una única lámina, considera eso un fallo salvo que el usuario pida expresamente una línea/lámina.
+5) Para UI, comprueba una jerarquía real de ScreenGui, contenedores, cabecera, contenido y controles; posiciones/tamaños coherentes y propiedades compatibles. No la sustituyas por un script que solo describa una UI.
+6) Verifica padres/ubicaciones, orden de dependencias, nombres/rutas exactas y separación cliente-servidor. No inventes clases, acciones, propiedades o capacidades.
+7) Conserva acciones útiles y corrige únicamente lo necesario; elimina acciones inválidas, duplicadas o contradictorias. Asegúrate de que cada dependencia se cree antes de ser usada.
+8) No afirmes que el plugin ya ejecutó o probó el plan. Si no puedes representar una parte con el esquema, dilo honestamente en reply y construye el resto.
+Devuelve el plan corregido completo, no una crítica ni una lista de recomendaciones. Si el borrador ya es excelente, puedes conservarlo.
+`;
+
+async function reviewConstructionDraft({ provider, model, apiKey, message, draft, history, signal }) {
+  const isBuildTask = /\b(construye|construir|crea|crear|haz|hacer|diseña|diseñar|genera|generar|arma|armar|edifica|edificar|build|create|make|design|generate|house|tower|mapa|casa|edificio|torre|obby|interfaz|ui|juego|game)\b/i.test(message);
+  const actions = Array.isArray(draft?.actions) ? draft.actions : (draft?.action ? [draft.action] : []);
+  const needsReview = actions.some(action =>
+    action && ['CREATE_STRUCTURE','CREATE_TREE','CREATE_PART','CREATE_GUI','CREATE_SCRIPT','CREATE_SYSTEM','CREATE_OBJECT'].includes(action.type)
+  );
+  if (!isBuildTask || !needsReview) return draft;
+
+  const reviewMessage = 'PETICIÓN ORIGINAL DEL USUARIO:\n' + message +
+    '\n\nBORRADOR QUE DEBES AUDITAR Y CORREGIR:\n' + JSON.stringify(draft);
+  try {
+    let response;
+    let payload;
+    if (provider === 'openai') {
+      const input = [
+        ...history.map(item => ({
+          role: item.role === 'model' ? 'assistant' : 'user',
+          content: item.parts.map(part => part.text || '').join('')
+        })),
+        { role: 'user', content: reviewMessage }
+      ];
+      response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST', signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey
+        },
+        body: JSON.stringify({
+          model,
+          instructions: SYSTEM_INSTRUCTION + '\\n\\n' + CONSTRUCTION_REVIEW_INSTRUCTION,
+          input,
+          text: { format: { type: 'json_object' } },
+          max_output_tokens: CONFIG.maxOutputTokens
+        })
+      });
+      payload = await response.json().catch(() => ({}));
+      if (!response.ok) return draft;
+      const output = Array.isArray(payload?.output)
+        ? payload.output.filter(item => item.type === 'message' && Array.isArray(item.content))
+          .flatMap(item => item.content)
+          .filter(item => item.type === 'output_text' && typeof item.text === 'string')
+          .map(item => item.text).join('').trim()
+        : '';
+      const reviewed = parseModelJson(output);
+      return reviewed && typeof reviewed.reply === 'string' &&
+        (Array.isArray(reviewed.actions) || reviewed.action !== undefined) ? reviewed : draft;
+    }
+
+    response = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/' +
+        encodeURIComponent(model) + ':generateContent',
+      {
+        method: 'POST', signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey
+        },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION + '\\n\\n' + CONSTRUCTION_REVIEW_INSTRUCTION }] },
+          contents: [{ role: 'user', parts: [{ text: reviewMessage }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.1,
+            maxOutputTokens: CONFIG.maxOutputTokens
+          }
+        })
+      }
+    );
+    payload = await response.json().catch(() => ({}));
+    if (!response.ok) return draft;
+    const output = payload?.candidates?.[0]?.content?.parts
+      ?.map(part => typeof part.text === 'string' ? part.text : '')
+      .join('').trim();
+    const reviewed = parseModelJson(output);
+    return reviewed && typeof reviewed.reply === 'string' &&
+      (Array.isArray(reviewed.actions) || reviewed.action !== undefined) ? reviewed : draft;
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    console.warn('Revisión arquitectónica no disponible; se conserva el borrador inicial.');
+    return draft;
+  }
+}
+
 function normalizeHistory(history) {
   if (!Array.isArray(history)) return [];
 
@@ -1191,13 +1289,25 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
         .trim();
     }
 
-    const parsed = parseModelJson(output);
+    let parsed = parseModelJson(output);
     if (!parsed || typeof parsed.reply !== 'string') {
       return res.status(502).json({
         ok: false,
         error: 'La respuesta de la IA no tenía el formato JSON esperado. Inténtalo de nuevo.'
       });
     }
+
+    // Una segunda pasada independiente revisa calidad geométrica, jerarquía y ubicaciones.
+    // Si el revisor falla, se conserva el borrador original en vez de bloquear toda la petición.
+    parsed = await reviewConstructionDraft({
+      provider: usedProvider,
+      model: usedModel,
+      apiKey: usedProvider === 'openai' ? OPENAI_API_KEY : GEMINI_API_KEY,
+      message,
+      draft: parsed,
+      history,
+      signal: controller.signal
+    });
 
     const reply = cleanText(parsed.reply, 3500) ||
       'No pude preparar una respuesta útil. Inténtalo otra vez.';
