@@ -218,6 +218,26 @@ function validatePart(raw, defaults = {}) {
   };
 }
 
+
+function removeExactDuplicateVolumes(parts) {
+  // Remove accidental, fully coincident opaque parts. Partial intersections are
+  // deliberately preserved because walls, floors, roofs and trim may need to meet.
+  const seen = new Set();
+  const kept = [];
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i];
+    const key = [
+      ...part.position, ...part.size, ...part.rotation
+    ].map(n => Number(n).toFixed(3)).join('|');
+    const duplicate = seen.has(key) && part.transparency === 0;
+    if (!duplicate) {
+      kept.push(part);
+      if (part.transparency === 0) seen.add(key);
+    }
+  }
+  return kept.reverse();
+}
+
 function validateTreeNode(node, state, depth = 0) {
   if (!isObject(node) || depth > CONFIG.maxTreeDepth) return null;
   state.count++;
@@ -358,19 +378,23 @@ function validateAction(raw) {
       });
       if (parts.some(part => !part)) return null;
 
-      // If all parts were emitted at the same point, separate them using a
-      // size-aware grid so different dimensions do not overlap accidentally.
+      // Only use grid fallback when the model failed to provide any layout at all.
+      // Never rearrange a valid multi-part design just because two pieces share an axis.
       const uniquePositions = new Set(parts.map(p => p.position.join(',')));
       if (parts.length > 1 && uniquePositions.size === 1) {
         const positions = layoutPartsWithoutOverlap(parts);
         parts.forEach((part, index) => { part.position = positions[index]; });
       }
 
+      // Exact opaque duplicates occupy the same volume and hide one another.
+      // Remove those duplicates without disturbing intentional wall/floor/roof joins.
+      const deduplicatedParts = removeExactDuplicateVolumes(parts);
+
       return {
         type: raw.type,
         name: cleanText(raw.name, 60) || 'ABX_Structure',
         parent: validParent(raw.parent),
-        parts
+        parts: deduplicatedParts
       };
     }
 
@@ -678,7 +702,7 @@ app.get('/', (_req, res) => {
   res.json({
     ok: true,
     service: 'ABX Build Backend',
-    version: '2.6.0',
+    version: '2.7.0',
     aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY),
     providers: {
       gemini: Boolean(GEMINI_API_KEY),
@@ -840,6 +864,12 @@ Antes de responder: 1) clasifica la tarea; 2) identifica el resultado observable
 CONSTRUCCIÓN 3D: DISEÑA, NO AMONTONES
 - Trata cada construcción como un plano con origen, escala, límites, ejes X/Y/Z, alturas, proporciones, circulación y composición.
 - Cada pieza necesita una posición absoluta deliberada, tamaño, orientación, nombre, material y color coherentes. Nunca reutilices [0,5,0] ni una única posición para todas las piezas.
+- Antes de emitir CREATE_STRUCTURE, calcula mentalmente la caja de cada pieza: centro ± la mitad del tamaño en X/Y/Z. Dos piezas que no deban tocarse necesitan una separación visible; no basta con que sus centros sean distintos.
+- Para paredes, calcula el grosor y coloca sus centros en las fachadas; para suelos, muebles y techos calcula la altura usando las caras de contacto. Ejemplo: si el suelo tiene centro Y=0 y altura 1, su cara superior es Y=0.5; un mueble de altura 2 debe tener centro Y=1.5 para apoyarse encima.
+- Evita piezas con el mismo centro, tamaño y rotación, salvo que exista una razón visual explícita. No apiles cubos completos coincidentes para simular detalles; usa piezas pequeñas colocadas en la cara correspondiente.
+- Distingue tres casos: contacto de superficies para apoyar piezas (correcto), pequeñas intersecciones en esquinas para unir geometría (solo si son necesarias) y volúmenes duplicados o grandes cruces accidentales (incorrectos).
+- Haz la construcción por conjuntos: primero base/plataforma, luego estructura principal, después aberturas y techo, y al final detalles. Mantén un origen común y simetría consistente; no cambies de escala a mitad del diseño.
+- Antes de finalizar, revisa pares cercanos: ¿el techo queda encima de las paredes?, ¿las ventanas están dentro de los huecos o pegadas a la fachada?, ¿los muebles tocan el suelo?, ¿hay paredes que bloquean la puerta?, ¿dos piezas opacas ocupan exactamente el mismo volumen? Corrige la posición/tamaño de la pieza afectada, no desplaces toda la construcción.
 - Calcula las coordenadas de forma consistente: base debajo; paredes en lados distintos; techo arriba; puertas/ventanas alineadas con la fachada; escaleras conectadas; muebles apoyados sobre superficies; caminos que conecten zonas; decoración fuera de las rutas.
 - Mantén solapamientos solo cuando sean intencionales para unir piezas. Evita volúmenes independientes coincidentes, objetos flotantes, elementos enterrados o tamaños desproporcionados.
 - Haz una auditoría espacial final: comprueba que cada pieza tenga coordenadas únicas cuando corresponda, que no haya dos piezas estructurales completas ocupando el mismo volumen, que las paredes cierren sin tapar la entrada, que ventanas y puertas estén en la fachada y que el jugador pueda recorrer el diseño. No uses una cuadrícula genérica como sustituto de un diseño con forma reconocible.
