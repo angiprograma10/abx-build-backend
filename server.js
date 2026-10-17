@@ -997,6 +997,32 @@ REVISA CON EXIGENCIA:
 Devuelve el plan corregido completo, no una crítica ni una lista de recomendaciones. Si el borrador ya es excelente, puedes conservarlo.
 `;
 
+function summarizeConstructionDraft(value) {
+  const actions = Array.isArray(value?.actions)
+    ? value.actions
+    : (value?.action ? [value.action] : []);
+  let structureParts = 0;
+  let treeNodes = 0;
+  for (const action of actions) {
+    if (action?.type === 'CREATE_STRUCTURE' && Array.isArray(action.parts)) {
+      structureParts += action.parts.length;
+    }
+    if (action?.type === 'CREATE_TREE' && action.root) {
+      const countNodes = node => {
+        if (!node || typeof node !== 'object') return 0;
+        return 1 + (Array.isArray(node.children) ? node.children.reduce((sum, child) => sum + countNodes(child), 0) : 0);
+      };
+      treeNodes += countNodes(action.root);
+    }
+  }
+  return {
+    actionCount: actions.length,
+    actionTypes: actions.map(action => cleanText(action?.type, 40) || 'unknown'),
+    structureParts,
+    treeNodes
+  };
+}
+
 async function reviewConstructionDraft({ provider, model, apiKey, message, draft, history, signal }) {
   const isBuildTask = /\b(construye|construir|crea|crear|haz|hacer|diseña|diseñar|genera|generar|arma|armar|edifica|edificar|build|create|make|design|generate|house|tower|mapa|casa|edificio|torre|obby|interfaz|ui|juego|game)\b/i.test(message);
   const actions = Array.isArray(draft?.actions) ? draft.actions : (draft?.action ? [draft.action] : []);
@@ -1005,6 +1031,7 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
   );
   if (!isBuildTask || !needsReview) return draft;
 
+  console.info('[ABX_DIAG] reviewer_start', JSON.stringify({ provider, model, draft: summarizeConstructionDraft(draft) }));
   const reviewMessage = 'PETICIÓN ORIGINAL DEL USUARIO:\n' + message +
     '\n\nBORRADOR QUE DEBES AUDITAR Y CORREGIR:\n' + JSON.stringify(draft);
   try {
@@ -1033,7 +1060,10 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
         })
       });
       payload = await response.json().catch(() => ({}));
-      if (!response.ok) return draft;
+      if (!response.ok) {
+        console.warn('[ABX_DIAG] reviewer_http_error', JSON.stringify({ provider, model, status: response.status }));
+        return draft;
+      }
       const output = Array.isArray(payload?.output)
         ? payload.output.filter(item => item.type === 'message' && Array.isArray(item.content))
           .flatMap(item => item.content)
@@ -1041,8 +1071,13 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
           .map(item => item.text).join('').trim()
         : '';
       const reviewed = parseModelJson(output);
-      return reviewed && typeof reviewed.reply === 'string' &&
-        (Array.isArray(reviewed.actions) || reviewed.action !== undefined) ? reviewed : draft;
+      if (reviewed && typeof reviewed.reply === 'string' &&
+        (Array.isArray(reviewed.actions) || reviewed.action !== undefined)) {
+        console.info('[ABX_DIAG] reviewer_result', JSON.stringify({ provider, model, result: summarizeConstructionDraft(reviewed) }));
+        return reviewed;
+      }
+      console.warn('[ABX_DIAG] reviewer_invalid_output', JSON.stringify({ provider, model, outputLength: output.length }));
+      return draft;
     }
 
     response = await fetch(
@@ -1066,16 +1101,24 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
       }
     );
     payload = await response.json().catch(() => ({}));
-    if (!response.ok) return draft;
+    if (!response.ok) {
+      console.warn('[ABX_DIAG] reviewer_http_error', JSON.stringify({ provider, model, status: response.status }));
+      return draft;
+    }
     const output = payload?.candidates?.[0]?.content?.parts
       ?.map(part => typeof part.text === 'string' ? part.text : '')
       .join('').trim();
     const reviewed = parseModelJson(output);
-    return reviewed && typeof reviewed.reply === 'string' &&
-      (Array.isArray(reviewed.actions) || reviewed.action !== undefined) ? reviewed : draft;
+    if (reviewed && typeof reviewed.reply === 'string' &&
+      (Array.isArray(reviewed.actions) || reviewed.action !== undefined)) {
+      console.info('[ABX_DIAG] reviewer_result', JSON.stringify({ provider, model, result: summarizeConstructionDraft(reviewed) }));
+      return reviewed;
+    }
+    console.warn('[ABX_DIAG] reviewer_invalid_output', JSON.stringify({ provider, model, outputLength: output.length }));
+    return draft;
   } catch (error) {
     // La revisión es opcional: si agota el tiempo, conserva el borrador inicial.
-    console.warn('Revisión arquitectónica no disponible; se conserva el borrador inicial.');
+    console.warn('[ABX_DIAG] reviewer_exception', JSON.stringify({ provider, model, name: error?.name || 'Error' }));
     return draft;
   }
 }
@@ -1303,6 +1346,8 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
         error: 'La respuesta de la IA no tenía el formato JSON esperado. Inténtalo de nuevo.'
       });
     }
+
+    console.info('[ABX_DIAG] primary_result', JSON.stringify({ provider: usedProvider, model: usedModel, draft: summarizeConstructionDraft(parsed) }));
 
     // Una segunda pasada independiente revisa calidad geométrica, jerarquía y ubicaciones.
     // Si el revisor falla, se conserva el borrador original en vez de bloquear toda la petición.
