@@ -20,13 +20,13 @@ const CONFIG = Object.freeze({
   maxMessageLength: 4000,
   maxHistoryItems: 20,
   maxHistoryText: 1800,
-  maxOutputTokens: 12000,
+  maxOutputTokens: 16000,
   geminiTimeoutMs: 30000,
   sessionTtlMs: 6 * 60 * 60 * 1000,
-  maxQueuedActions: 30,
-  maxPlanActions: 20,
+  maxQueuedActions: 40,
+  maxPlanActions: 30,
   pendingPlanTtlMs: 3 * 60 * 1000,
-  maxActionPayload: 100000,
+  maxActionPayload: 200000,
   maxScriptLength: 10000,
   maxTreeNodes: 300,
   maxTreeDepth: 15,
@@ -969,7 +969,7 @@ INTERFACES VISUALES: CREA INSTANCIAS REALES
 - Puedes proponer un plan ordenado de varias acciones en una sola solicitud. Cada acción debe ser válida por sí misma y depender, en lo posible, de objetos creados en acciones anteriores. La cola del plugin ejecuta las acciones una por una y en orden; no presupongas que una acción terminó con éxito solo porque fue encolada.
 - Para una petición de juego completo, define primero un MVP coherente y jugable: escenario y spawn, ciclo principal, interfaz, economía/progresión y lógica necesaria. Prioriza una experiencia pequeña pero funcional sobre sistemas decorativos enormes. Usa una mezcla de CREATE_STRUCTURE/CREATE_TREE para instancias físicas y visuales, y CREATE_SCRIPT para comportamiento cuando corresponda; no conviertas todo automáticamente en un único script monolítico.
 - Divide el resultado en acciones compatibles con el esquema. Usa rutas y nombres exactos y estables entre acciones. Crea primero carpetas, objetos y remotos requeridos; después scripts y contenido que dependan de ellos. No repitas acciones innecesarias ni crees nombres duplicados.
-- Límite: máximo 20 acciones por plan, máximo 30 acciones en la cola y cada CREATE_SCRIPT hasta 10000 caracteres. Si el juego no cabe, construye el núcleo jugable más valioso y explica qué sistemas conviene añadir en la siguiente iteración. Nunca afirmes que todo quedó probado o funcionando sin confirmación del plugin.
+- Límite: máximo 30 acciones por plan, máximo 30 acciones en la cola y cada CREATE_SCRIPT hasta 10000 caracteres. Si el juego no cabe, construye el núcleo jugable más valioso y explica qué sistemas conviene añadir en la siguiente iteración. Nunca afirmes que todo quedó probado o funcionando sin confirmación del plugin.
 - Devuelve las acciones en la propiedad actions como un arreglo ordenado. Para conversación sin cambios, usa actions: [].
 
 CALIDAD PROFESIONAL PARA TODAS LAS CATEGORÍAS — NO SOLO MODELOS 3D
@@ -1241,6 +1241,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   }
 
   const message = cleanText(req.body?.message, CONFIG.maxMessageLength);
+  const buildMode = req.body?.buildMode === 'full-game' ? 'full-game' : 'standard';
   if (!message) {
     return res.status(400).json({ ok: false, error: 'Escribe un mensaje.' });
   }
@@ -1272,11 +1273,14 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   }
 
   const history = normalizeHistory(req.body?.history);
+  const effectiveMessage = buildMode === 'full-game'
+    ? message + `\n\n[ABX BUILD — MODO JUEGO COMPLETO]\nInterpreta esta solicitud como un proyecto de juego Roblox jugable de alcance pequeño pero coherente, creado desde un solo prompt. Devuelve un plan ordenado en actions con hasta ${CONFIG.maxPlanActions} acciones válidas del esquema. Incluye, según corresponda: (1) escenario y spawn seguros; (2) ciclo principal realmente jugable; (3) UI real con jerarquía CREATE_TREE; (4) scripts separados entre servidor y cliente; (5) remotos/carpetas/valores necesarios antes de scripts dependientes; (6) recompensas, progreso y condiciones de reinicio; (7) iluminación/ambiente cuando sea útil. Usa CREATE_STRUCTURE para geometría compacta y CREATE_TREE para jerarquías. Mantén cada script por debajo de ${CONFIG.maxScriptLength} caracteres. Ordena acciones para que sus dependencias existan antes de usarlas. Evita acciones cosméticas que no ayuden al juego. Si no cabe un juego completo dentro de los límites del esquema, prioriza un MVP coherente y jugable, y di exactamente qué queda pendiente. No prometas pruebas que no se hayan ejecutado. La salida debe conservar el JSON de contrato con reply y actions; no inventes tipos de acción.`
+    : message;
   const contents = history.map(item => ({
     role: item.role === 'model' ? 'model' : 'user',
     parts: item.parts
   }));
-  contents.push({ role: 'user', parts: [{ text: message }] });
+  contents.push({ role: 'user', parts: [{ text: effectiveMessage }] });
 
   const controller = new AbortController();
   const timeout = setTimeout(
@@ -1308,7 +1312,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
               role: item.role === 'model' ? 'assistant' : 'user',
               content: item.parts.map(part => part.text || '').join('')
             })),
-            { role: 'user', content: message }
+            { role: 'user', content: effectiveMessage }
           ];
           candidateResponse = await fetch('https://api.openai.com/v1/responses', {
             method: 'POST',
@@ -1421,7 +1425,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
       provider: reviewerProvider,
       model: reviewerModel,
       apiKey: reviewerApiKey,
-      message,
+      message: effectiveMessage,
       draft: parsed,
       history,
       signal: controller.signal
