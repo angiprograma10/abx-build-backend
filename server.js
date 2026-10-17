@@ -813,9 +813,10 @@ const SYSTEM_INSTRUCTION = `
 Eres ABX Build, un ingeniero senior de Roblox Studio especializado en diseño 3D, UX/UI, arquitectura de software y Luau. Tu objetivo no es solo describir una solución: convierte las peticiones de crear, construir, programar, modificar o reparar en una acción concreta que el plugin pueda aplicar.
 
 IDIOMA Y HONESTIDAD
-- Responde en español natural y conserva el contexto. Entiende errores ortográficos y peticiones breves.
+- Responde en español natural y conserva el contexto, preferencias y restricciones previas. Interpreta errores ortográficos, frases breves y referencias al trabajo anterior.
 - Nunca afirmes que inspeccionaste Studio, ejecutaste código, probaste el juego o aplicaste cambios si no ocurrió.
-- Si el usuario solo pregunta o pide consejos, devuelve action:null.
+- Si el usuario solo pregunta o pide consejos, devuelve actions:[].
+- Trabaja con eficiencia: evita acciones repetidas, explicaciones largas, adornos innecesarios y reconstrucciones completas cuando basta una edición pequeña. Prioriza la primera versión útil y coherente.
 - Si falta un dato no esencial, elige un valor predeterminado sensato. Pregunta solo ante ambigüedad crítica o riesgo de cambios destructivos.
 - No inventes APIs, clases, propiedades, servicios ni resultados.
 
@@ -827,6 +828,7 @@ CONSTRUCCIÓN 3D: DISEÑA, NO AMONTONES
 - Cada pieza necesita una posición absoluta deliberada, tamaño, orientación, nombre, material y color coherentes. Nunca reutilices [0,5,0] ni una única posición para todas las piezas.
 - Calcula las coordenadas de forma consistente: base debajo; paredes en lados distintos; techo arriba; puertas/ventanas alineadas con la fachada; escaleras conectadas; muebles apoyados sobre superficies; caminos que conecten zonas; decoración fuera de las rutas.
 - Mantén solapamientos solo cuando sean intencionales para unir piezas. Evita volúmenes independientes coincidentes, objetos flotantes, elementos enterrados o tamaños desproporcionados.
+- Haz una auditoría espacial final: comprueba que cada pieza tenga coordenadas únicas cuando corresponda, que no haya dos piezas estructurales completas ocupando el mismo volumen, que las paredes cierren sin tapar la entrada, que ventanas y puertas estén en la fachada y que el jugador pueda recorrer el diseño. No uses una cuadrícula genérica como sustituto de un diseño con forma reconocible.
 - Busca una silueta reconocible, simetría cuando convenga, entrada/salida, accesibilidad y detalles funcionales.
 - Para construcciones de hasta 60 piezas, usa CREATE_STRUCTURE con coordenadas explícitas por pieza. Para jerarquías de objetos o UI usa CREATE_TREE. Para una pieza usa CREATE_PART.
 - Una casa terminada debería tener, según el presupuesto, base, paredes diferenciadas, entrada, techo, ventanas y detalles; una torre, niveles conectados verticalmente; un mapa, zonas legibles y caminos conectados.
@@ -853,6 +855,7 @@ PROGRAMACIÓN ROBLOX/LUAU
 - No prometas guardado persistente sin implementar DataStore con manejo de errores. Para compras Robux, no simules compras ni otorgues beneficios desde el cliente; usa el flujo oficial y validación del servidor cuando el alcance lo permita.
 - Evita conexiones duplicadas, bucles infinitos, polling costoso, dependencias no creadas, esperas infinitas y trabajo por frame innecesario.
 - No borres ni reemplaces scripts existentes por defecto. Para editar código existente, inspecciona el contexto disponible; si no puedes, crea una solución independiente o explica qué falta.
+- Al modificar sistemas existentes, preserva contratos, nombres, valores y eventos ya utilizados por otros scripts. No cambies simultáneamente varios subsistemas sin necesidad. Si no puedes conocer el contenido de un script existente, no finjas que lo editaste de forma segura.
 - No afirmes que el código está probado. Antes de emitirlo, revisa sintaxis probable, nombres, APIs, tipos, ubicaciones y eventos.
 - CREATE_SCRIPT admite máximo 10000 caracteres. No incluyas loadstring, require(, getfenv, setfenv, InsertService ni HttpService, ni intentes eludir permisos.
 
@@ -884,8 +887,9 @@ INSPECT_SELECTION: {type}
 
 COMPROBACIÓN FINAL
 - ¿La acción cumple la intención y el esquema?
-- ¿Las piezas tienen posiciones y proporciones coherentes?
-- ¿La UI usa jerarquía real y tipos de propiedad compatibles?
+- ¿Las piezas tienen posiciones, proporciones, apoyos y recorridos coherentes, sin solapamientos accidentales?
+- ¿Cada ruta y dependencia de las acciones posteriores existe por una acción anterior o por una ubicación estándar confirmada?
+- ¿La UI usa jerarquía real, tamaños UDim2 correctos y tipos de propiedad compatibles?
 - ¿El código separa correctamente cliente/servidor y valida entradas?
 - ¿La respuesta describe honestamente lo que puede conseguir el plan completo y sus límites?
 Si no se puede representar la petición con honestidad, devuelve actions:[] y explica el límite.
@@ -970,29 +974,63 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   session.pendingPlan = null;
 
   try {
-    const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/' +
-        encodeURIComponent(model) + ':generateContent',
-      {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': GEMINI_API_KEY
-        },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-          contents,
-          generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.25,
-            maxOutputTokens: CONFIG.maxOutputTokens
-          }
-        })
-      }
-    );
+    // Resilient model routing: honor the requested/default model first, then
+    // try other configured models only for transient provider failures.
+    const modelCandidates = [
+      model,
+      ...Array.from(ALLOWED_MODELS).filter(candidate => candidate !== model)
+    ];
+    let response = null;
+    let payload = {};
+    let usedModel = model;
 
-    const payload = await response.json().catch(() => ({}));
+    for (const candidateModel of modelCandidates) {
+      if (controller.signal.aborted) break;
+      try {
+        const candidateResponse = await fetch(
+          'https://generativelanguage.googleapis.com/v1beta/models/' +
+            encodeURIComponent(candidateModel) + ':generateContent',
+          {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': GEMINI_API_KEY
+            },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+              contents,
+              generationConfig: {
+                responseMimeType: 'application/json',
+                temperature: 0.2,
+                maxOutputTokens: CONFIG.maxOutputTokens
+              }
+            })
+          }
+        );
+
+        const candidatePayload = await candidateResponse.json().catch(() => ({}));
+        response = candidateResponse;
+        payload = candidatePayload;
+        usedModel = candidateModel;
+
+        const retryable = [408, 429, 500, 502, 503, 504].includes(candidateResponse.status);
+        if (candidateResponse.ok || !retryable) break;
+        console.warn('Modelo IA temporalmente no disponible:', candidateModel,
+          candidateResponse.status, 'probando alternativa.');
+      } catch (error) {
+        if (error.name === 'AbortError') throw error;
+        console.warn('Fallo temporal de conexión con modelo IA:', candidateModel);
+        if (candidateModel === modelCandidates[modelCandidates.length - 1]) throw error;
+      }
+    }
+
+    if (!response) {
+      return res.status(502).json({
+        ok: false,
+        error: 'Ningún modelo de IA respondió. Inténtalo de nuevo en unos segundos.'
+      });
+    }
 
     if (!response.ok) {
       console.error('Gemini API error:', response.status,
