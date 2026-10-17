@@ -1,6 +1,6 @@
 {
   "name": "abx-build-backend",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "private": true,
   "description": "Backend de IA para ABX Build en Roblox Studio",
   "main": "server.js",
