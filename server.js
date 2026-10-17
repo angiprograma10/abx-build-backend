@@ -12,7 +12,7 @@ app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 0));
 const PORT = Number(process.env.PORT || 3000);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
 
 const CONFIG = Object.freeze({
@@ -40,7 +40,7 @@ const sessions = new Map();
 const rateBuckets = new Map();
 
 const ALLOWED_MODELS = new Set([
-  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash-lite',
   'gemini-3-flash-preview',
   'gemini-3.1-pro-preview'
 ]);
@@ -1237,7 +1237,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   const model = validRequested
     ? requestedModel
     : (ALLOWED_MODELS.has(envModel) ? envModel
-      : (ALLOWED_OPENAI_MODELS.has(openaiEnvModel) ? openaiEnvModel : 'gemini-3.1-flash-lite'));
+      : (ALLOWED_OPENAI_MODELS.has(openaiEnvModel) ? openaiEnvModel : 'gemini-3.5-flash-lite'));
   const selectedProvider = ALLOWED_OPENAI_MODELS.has(model) ? 'openai' : 'gemini';
 
   // Respect the selected provider: missing credentials are a clear configuration
