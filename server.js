@@ -1303,10 +1303,16 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
 
     // Una segunda pasada independiente revisa calidad geométrica, jerarquía y ubicaciones.
     // Si el revisor falla, se conserva el borrador original en vez de bloquear toda la petición.
+    // Revisión independiente con el modelo más capaz disponible, sin depender del modelo seleccionado.
+    const reviewerProvider = OPENAI_API_KEY ? 'openai' : 'gemini';
+    const reviewerModel = reviewerProvider === 'openai'
+      ? (ALLOWED_OPENAI_MODELS.has(DEFAULT_OPENAI_MODEL) ? DEFAULT_OPENAI_MODEL : 'gpt-5.5')
+      : 'gemini-3.1-pro-preview';
+    const reviewerApiKey = reviewerProvider === 'openai' ? OPENAI_API_KEY : GEMINI_API_KEY;
     parsed = await reviewConstructionDraft({
-      provider: usedProvider,
-      model: usedModel,
-      apiKey: usedProvider === 'openai' ? OPENAI_API_KEY : GEMINI_API_KEY,
+      provider: reviewerProvider,
+      model: reviewerModel,
+      apiKey: reviewerApiKey,
       message,
       draft: parsed,
       history,
