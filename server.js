@@ -11,7 +11,9 @@ app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 0));
 
 const PORT = Number(process.env.PORT || 3000);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
 
 const CONFIG = Object.freeze({
   bodyLimit: '256kb',
@@ -41,6 +43,10 @@ const ALLOWED_MODELS = new Set([
   'gemini-3.1-flash-lite',
   'gemini-3-flash-preview',
   'gemini-3.1-pro-preview'
+]);
+const ALLOWED_OPENAI_MODELS = new Set([
+  'gpt-5.5',
+  'gpt-5.4-mini'
 ]);
 
 const ALLOWED_PARENTS = new Set([
@@ -672,11 +678,15 @@ app.get('/', (_req, res) => {
   res.json({
     ok: true,
     service: 'ABX Build Backend',
-    version: '2.5.0',
-    aiConfigured: Boolean(GEMINI_API_KEY),
+    version: '2.6.0',
+    aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY),
+    providers: {
+      gemini: Boolean(GEMINI_API_KEY),
+      openai: Boolean(OPENAI_API_KEY)
+    },
     features: [
       'session-queue', 'action-validation',
-      'roblox-create-edit-inspect', 'gemini-chat'
+      'roblox-create-edit-inspect', 'gemini-chat', 'openai-responses'
     ]
   });
 });
@@ -686,7 +696,11 @@ app.get('/health', (_req, res) => {
     ok: true,
     uptime: Math.floor(process.uptime()),
     activeSessions: sessions.size,
-    aiConfigured: Boolean(GEMINI_API_KEY)
+    aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY),
+    providers: {
+      gemini: Boolean(GEMINI_API_KEY),
+      openai: Boolean(OPENAI_API_KEY)
+    }
   });
 });
 
@@ -948,20 +962,37 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     return res.status(400).json({ ok: false, error: 'Escribe un mensaje.' });
   }
 
-  if (!GEMINI_API_KEY) {
+  const requestedModel = cleanText(req.body?.model, 80);
+  const envModel = cleanText(DEFAULT_MODEL, 80);
+  const openaiEnvModel = cleanText(DEFAULT_OPENAI_MODEL, 80);
+  const validRequested = ALLOWED_MODELS.has(requestedModel) ||
+    ALLOWED_OPENAI_MODELS.has(requestedModel);
+  const model = validRequested
+    ? requestedModel
+    : (ALLOWED_MODELS.has(envModel) ? envModel
+      : (ALLOWED_OPENAI_MODELS.has(openaiEnvModel) ? openaiEnvModel : 'gemini-3.1-flash-lite'));
+  const selectedProvider = ALLOWED_OPENAI_MODELS.has(model) ? 'openai' : 'gemini';
+
+  // Respect the selected provider: missing credentials are a clear configuration
+  // error, rather than silently running a different provider than the user chose.
+  if (selectedProvider === 'openai' && !OPENAI_API_KEY) {
+    return res.status(503).json({
+      ok: false,
+      error: 'Falta configurar OPENAI_API_KEY como variable secreta en Render.'
+    });
+  }
+  if (selectedProvider === 'gemini' && !GEMINI_API_KEY) {
     return res.status(503).json({
       ok: false,
       error: 'Falta configurar GEMINI_API_KEY en el backend.'
     });
   }
 
-  const requestedModel = cleanText(req.body?.model, 80);
-  const envModel = cleanText(DEFAULT_MODEL, 80);
-  const model = ALLOWED_MODELS.has(requestedModel)
-    ? requestedModel
-    : (ALLOWED_MODELS.has(envModel) ? envModel : 'gemini-3.1-flash-lite');
-
-  const contents = normalizeHistory(req.body?.history);
+  const history = normalizeHistory(req.body?.history);
+  const contents = history.map(item => ({
+    role: item.role === 'model' ? 'model' : 'user',
+    parts: item.parts
+  }));
   contents.push({ role: 'user', parts: [{ text: message }] });
 
   const controller = new AbortController();
@@ -974,83 +1005,134 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   session.pendingPlan = null;
 
   try {
-    // Resilient model routing: honor the requested/default model first, then
-    // try other configured models only for transient provider failures.
-    const modelCandidates = [
-      model,
-      ...Array.from(ALLOWED_MODELS).filter(candidate => candidate !== model)
-    ];
+    // Try the chosen model first. Only transient provider failures trigger
+    // fallbacks, and each provider keeps its own model allowlist.
+    const primaryModels = selectedProvider === 'openai'
+      ? [model, ...Array.from(ALLOWED_OPENAI_MODELS).filter(id => id !== model)]
+      : [model, ...Array.from(ALLOWED_MODELS).filter(id => id !== model)];
+    const fallbackModels = selectedProvider === 'openai'
+      ? Array.from(ALLOWED_MODELS)
+      : Array.from(ALLOWED_OPENAI_MODELS);
+    const candidates = [
+      ...primaryModels.map(id => ({ provider: selectedProvider, model: id })),
+      ...fallbackModels.map(id => ({ provider: selectedProvider === 'openai' ? 'gemini' : 'openai', model: id }))
+    ].filter(candidate => candidate.provider === 'openai' ? Boolean(OPENAI_API_KEY) : Boolean(GEMINI_API_KEY));
+
     let response = null;
     let payload = {};
     let usedModel = model;
+    let usedProvider = selectedProvider;
 
-    for (const candidateModel of modelCandidates) {
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i];
       if (controller.signal.aborted) break;
       try {
-        const candidateResponse = await fetch(
-          'https://generativelanguage.googleapis.com/v1beta/models/' +
-            encodeURIComponent(candidateModel) + ':generateContent',
-          {
+        let candidateResponse;
+        if (candidate.provider === 'openai') {
+          const openAIInput = [
+            ...history.map(item => ({
+              role: item.role === 'model' ? 'assistant' : 'user',
+              content: item.parts.map(part => part.text || '').join('')
+            })),
+            { role: 'user', content: message }
+          ];
+          candidateResponse = await fetch('https://api.openai.com/v1/responses', {
             method: 'POST',
             signal: controller.signal,
             headers: {
               'Content-Type': 'application/json',
-              'x-goog-api-key': GEMINI_API_KEY
+              'Authorization': 'Bearer ' + OPENAI_API_KEY
             },
             body: JSON.stringify({
-              systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-              contents,
-              generationConfig: {
-                responseMimeType: 'application/json',
-                temperature: 0.2,
-                maxOutputTokens: CONFIG.maxOutputTokens
-              }
+              model: candidate.model,
+              instructions: SYSTEM_INSTRUCTION,
+              input: openAIInput,
+              text: { format: { type: 'json_object' } },
+              max_output_tokens: CONFIG.maxOutputTokens
             })
-          }
-        );
+          });
+        } else {
+          candidateResponse = await fetch(
+            'https://generativelanguage.googleapis.com/v1beta/models/' +
+              encodeURIComponent(candidate.model) + ':generateContent',
+            {
+              method: 'POST',
+              signal: controller.signal,
+              headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': GEMINI_API_KEY
+              },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+                contents,
+                generationConfig: {
+                  responseMimeType: 'application/json',
+                  temperature: 0.2,
+                  maxOutputTokens: CONFIG.maxOutputTokens
+                }
+              })
+            }
+          );
+        }
 
         const candidatePayload = await candidateResponse.json().catch(() => ({}));
         response = candidateResponse;
         payload = candidatePayload;
-        usedModel = candidateModel;
+        usedModel = candidate.model;
+        usedProvider = candidate.provider;
 
         const retryable = [408, 429, 500, 502, 503, 504].includes(candidateResponse.status);
         if (candidateResponse.ok || !retryable) break;
-        console.warn('Modelo IA temporalmente no disponible:', candidateModel,
+        console.warn('Modelo IA temporalmente no disponible:', candidate.provider, candidate.model,
           candidateResponse.status, 'probando alternativa.');
       } catch (error) {
         if (error.name === 'AbortError') throw error;
-        console.warn('Fallo temporal de conexión con modelo IA:', candidateModel);
-        if (candidateModel === modelCandidates[modelCandidates.length - 1]) throw error;
+        console.warn('Fallo temporal de conexión con modelo IA:', candidate.provider, candidate.model);
+        if (i === candidates.length - 1) throw error;
       }
     }
 
     if (!response) {
       return res.status(502).json({
         ok: false,
-        error: 'Ningún modelo de IA respondió. Inténtalo de nuevo en unos segundos.'
+        error: 'Ningún modelo de IA respondió. Revisa la conexión y las claves API.'
       });
     }
 
     if (!response.ok) {
-      console.error('Gemini API error:', response.status,
-        cleanText(payload?.error?.message, 300));
+      const providerError = cleanText(payload?.error?.message, 300);
+      console.error('Error de proveedor IA:', usedProvider, response.status, providerError);
       return res.status(502).json({
         ok: false,
-        error: 'Gemini no pudo responder. Revisa el modelo y la configuración de la API.'
+        error: usedProvider === 'openai'
+          ? 'OpenAI no pudo responder. Revisa la clave, el acceso al modelo y el saldo de la API.'
+          : 'Gemini no pudo responder. Revisa el modelo y la configuración de la API.'
       });
     }
 
-    const output = payload?.candidates?.[0]?.content?.parts
-      ?.map(part => typeof part.text === 'string' ? part.text : '')
-      .join('')
-      .trim();
+    let output = '';
+    if (usedProvider === 'openai') {
+      output = Array.isArray(payload?.output)
+        ? payload.output
+            .filter(item => item.type === 'message' && Array.isArray(item.content))
+            .flatMap(item => item.content)
+            .filter(item => item.type === 'output_text' && typeof item.text === 'string')
+            .map(item => item.text)
+            .join('')
+            .trim()
+        : '';
+    } else {
+      output = payload?.candidates?.[0]?.content?.parts
+        ?.map(part => typeof part.text === 'string' ? part.text : '')
+        .join('')
+        .trim();
+    }
 
     const parsed = parseModelJson(output);
     if (!parsed || typeof parsed.reply !== 'string') {
       return res.status(502).json({
         ok: false,
-        error: 'La respuesta de Gemini no tenía el formato JSON esperado. Inténtalo de nuevo.'
+        error: 'La respuesta de la IA no tenía el formato JSON esperado. Inténtalo de nuevo.'
       });
     }
 
@@ -1117,7 +1199,8 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
       reply: responseReply,
       action,
       planCount: actions.length,
-      modelUsed: usedModel
+      modelUsed: usedModel,
+      providerUsed: usedProvider
     });
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -1127,10 +1210,10 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
       });
     }
 
-    console.error('Fallo de Gemini:', cleanText(error.message, 250));
+    console.error('Fallo del proveedor IA:', cleanText(error.message, 250));
     return res.status(502).json({
       ok: false,
-      error: 'No se pudo conectar con Gemini. Inténtalo de nuevo.'
+      error: 'No se pudo conectar con ningún proveedor de IA. Inténtalo de nuevo.'
     });
   } finally {
     clearTimeout(timeout);
