@@ -226,8 +226,8 @@ function removeExactDuplicateVolumes(parts) {
   const kept = [];
   for (let i = parts.length - 1; i >= 0; i--) {
     const part = parts[i];
-    const key = [
-      part.shape, ...part.position, ...part.size, ...part.rotation
+    const key = part.shape + '|' + [
+      ...part.position, ...part.size, ...part.rotation
     ].map(n => Number(n).toFixed(3)).join('|');
     const duplicate = seen.has(key) && part.transparency === 0;
     if (!duplicate) {
@@ -276,22 +276,9 @@ function validateTreeNode(node, state, depth = 0) {
     });
     if (!part) return null;
 
-    // Repair exact duplicate world positions in a generated model/tree.
-    // Adjacent parts are shifted by their actual widths instead of being stacked.
-    if (!state.positionGroups) state.positionGroups = new Map();
-    if (!state.usedPositions) state.usedPositions = new Set();
-    const originalKey = part.position.join(',');
-    const group = state.positionGroups.get(originalKey) || { width: 0, count: 0 };
-    if (group.count > 0) {
-      part.position[0] += group.width + 3 * group.count;
-      while (state.usedPositions.has(part.position.join(','))) {
-        part.position[0] += part.size[0] + 3;
-      }
-    }
-    group.width += part.size[0];
-    group.count += 1;
-    state.positionGroups.set(originalKey, group);
-    state.usedPositions.add(part.position.join(','));
+    // Preserve the model's explicit coordinates. Automatically shifting parts
+    // with shared centers breaks intentional assemblies, wall trims and details.
+    // Missing positions already receive a deterministic size-aware fallback above.
     result.properties = part;
   }
 
@@ -702,7 +689,7 @@ app.get('/', (_req, res) => {
   res.json({
     ok: true,
     service: 'ABX Build Backend',
-    version: '2.7.0',
+    version: '2.8.0',
     aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY),
     providers: {
       gemini: Boolean(GEMINI_API_KEY),
@@ -875,6 +862,10 @@ CONSTRUCCIÓN 3D: DISEÑA, NO AMONTONES
 - Haz una auditoría espacial final: comprueba que cada pieza tenga coordenadas únicas cuando corresponda, que no haya dos piezas estructurales completas ocupando el mismo volumen, que las paredes cierren sin tapar la entrada, que ventanas y puertas estén en la fachada y que el jugador pueda recorrer el diseño. No uses una cuadrícula genérica como sustituto de un diseño con forma reconocible.
 - Busca una silueta reconocible, simetría cuando convenga, entrada/salida, accesibilidad y detalles funcionales.
 - Para construcciones de hasta 60 piezas, usa CREATE_STRUCTURE con coordenadas explícitas por pieza. Para jerarquías de objetos o UI usa CREATE_TREE. Para una pieza usa CREATE_PART.
+- En CREATE_TREE, no pongas todas las piezas físicas en la misma posición ni dependas de que el backend las mueva: conserva el mismo origen y calcula cada coordenada de forma intencional. El backend preserva las posiciones explícitas para no romper ensamblajes válidos.
+- Antes de crear un edificio o modelo, estima la huella total en X/Z y su altura; reserva espacio para la entrada, caminos y separación con otras zonas. En una estructura modular, nombra las piezas por función (Base, Wall_Front, Wall_Left, Roof_Main, Window_Left) y evita nombres genéricos repetidos.
+- En las modificaciones, no reconstruyas por defecto el objeto entero. Inspecciona primero la selección o la ruta cuando el usuario habla de un objeto existente, y realiza el cambio mínimo compatible con el contenido inspeccionado.
+- Las interfaces deben diseñarse con contenedores y restricciones de tamaño; no asignes la misma Position/Size a todos los elementos. Usa UIListLayout/UIGridLayout solo cuando la jerarquía y las propiedades sean compatibles, y no combines un layout automático con posiciones manuales contradictorias.
 - Una casa terminada debería tener, según el presupuesto, base, paredes diferenciadas, entrada, techo, ventanas y detalles; una torre, niveles conectados verticalmente; un mapa, zonas legibles y caminos conectados.
 - No llenes la escena de adornos irrelevantes. Prioriza un conjunto coherente y terminado dentro del límite. Si la petición excede 60 piezas o 300 nodos, entrega una unidad útil que quepa y explica brevemente el límite, sin afirmar que se hizo todo.
 
