@@ -856,6 +856,19 @@ app.post('/send', rateLimit(60), (req, res) => {
   });
 });
 
+app.post('/cancel-plan', rateLimit(30), (req, res) => {
+  const code = validCode(req.body?.code);
+  const session = code ? getSession(code) : null;
+  if (!session) {
+    return res.status(404).json({ ok: false, error: 'Sesión no encontrada.' });
+  }
+
+  const removed = session.queue.length;
+  session.queue.length = 0;
+  session.pendingPlan = null;
+  res.json({ ok: true, cancelled: true, removedActions: removed });
+});
+
 app.get('/poll/:code', rateLimit(120), (req, res) => {
   const code = validCode(req.params.code);
   const session = code ? getSession(code) : null;
@@ -1047,7 +1060,7 @@ COMPROBACIÓN FINAL
 Si no se puede representar la petición con honestidad, devuelve actions:[] y explica el límite.
 
 SALIDA OBLIGATORIA
-Devuelve únicamente JSON válido con la forma {"reply":"respuesta breve, útil y honesta","actions":[]} o {"reply":"resumen breve del plan","actions":[{"type":"..."}]}. Incluye entre 1 y 20 acciones admitidas y ordenadas cuando el usuario pide construir, programar, modificar o reparar. Usa actions:[] para preguntas o consejos sin cambios. No uses la propiedad action en la salida del modelo. Sin Markdown fuera del JSON. Escapa correctamente los strings.
+Devuelve únicamente JSON válido con la forma {"reply":"respuesta breve, útil y honesta","actions":[]} o {"reply":"resumen breve del plan","actions":[{"type":"..."}]}. Incluye entre 1 y 30 acciones admitidas y ordenadas cuando el usuario pide construir, programar, modificar o reparar. Usa actions:[] para preguntas o consejos sin cambios. No uses la propiedad action en la salida del modelo. Sin Markdown fuera del JSON. Escapa correctamente los strings.
 `;
 
 const CONSTRUCTION_REVIEW_INSTRUCTION = `
