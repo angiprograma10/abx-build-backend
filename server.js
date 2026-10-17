@@ -672,7 +672,7 @@ app.get('/', (_req, res) => {
   res.json({
     ok: true,
     service: 'ABX Build Backend',
-    version: '2.4.0',
+    version: '2.5.0',
     aiConfigured: Boolean(GEMINI_API_KEY),
     features: [
       'session-queue', 'action-validation',
@@ -1116,7 +1116,8 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
       ok: true,
       reply: responseReply,
       action,
-      planCount: actions.length
+      planCount: actions.length,
+      modelUsed: usedModel
     });
   } catch (error) {
     if (error.name === 'AbortError') {
