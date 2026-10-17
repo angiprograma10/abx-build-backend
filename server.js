@@ -41,8 +41,8 @@ const rateBuckets = new Map();
 
 const ALLOWED_MODELS = new Set([
   'gemini-3.5-flash-lite',
-  'gemini-3-flash-preview',
-  'gemini-3.6-flash'
+  'gemini-3.1-flash-lite',
+  'gemini-3-flash-preview'
 ]);
 const ALLOWED_OPENAI_MODELS = new Set([
   'gpt-5.5',
