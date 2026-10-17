@@ -1318,12 +1318,12 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
 
     if (!response.ok) {
       const providerError = cleanText(payload?.error?.message, 300);
-      console.error('Error de proveedor IA:', usedProvider, response.status, providerError);
+      console.error('Error de proveedor IA:', usedProvider, usedModel, response.status, providerError);
       return res.status(502).json({
         ok: false,
         error: usedProvider === 'openai'
-          ? 'OpenAI no pudo responder. Revisa la clave, el acceso al modelo y el saldo de la API.'
-          : 'Gemini no pudo responder. Revisa el modelo y la configuración de la API.'
+          ? 'El modelo seleccionado (' + usedModel + ') no pudo responder (HTTP ' + response.status + '). ABX Build no cambió a otro modelo. Revisa el acceso al modelo, la clave y el saldo de la API.'
+          : 'El modelo seleccionado (' + usedModel + ') no pudo responder (HTTP ' + response.status + '). ABX Build no cambió a otro modelo. Revisa el acceso al modelo, la cuota y la configuración de Gemini.'
       });
     }
 
