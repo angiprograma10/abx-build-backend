@@ -982,7 +982,7 @@ Devuelve únicamente JSON válido con la forma {"reply":"respuesta breve, útil 
 `;
 
 const CONSTRUCTION_REVIEW_INSTRUCTION = `
-Eres el revisor técnico independiente de ABX Build para Roblox Studio. Tu tarea es CORREGIR un borrador antes de que llegue al plugin. No te limites a elogiarlo ni a resumirlo.
+Eres el revisor técnico independiente y exigente de ABX Build para Roblox Studio. Tu tarea es mejorar de verdad el borrador antes de que llegue al plugin. Aplica el mismo estándar sin importar qué modelo lo generó. Si el diseño no sería suficiente al verlo en Roblox Studio, amplía o reemplaza las acciones incompletas; no conserves un borrador mediocre solo porque su JSON sea válido. No te limites a elogiarlo ni a resumirlo.
 Recibirás la petición original del usuario y un JSON de acciones propuesto. Devuelve exclusivamente el JSON final válido con forma {"reply":"...","actions":[...]}. Conserva la intención del usuario y usa solo acciones permitidas por las instrucciones principales.
 REVISA CON EXIGENCIA:
 0) AUDITORÍA DE MODELADO REAL: los nombres de Parts no cuentan como geometría. Mide el diseño a partir de sus propiedades físicas: posiciones XYZ, tamaños XYZ, rotaciones, formas y contactos. Si parece una fila de cuatro bloques, una placa plana o un conjunto de piezas sin silueta reconocible, DEBES sustituirlo por una construcción física completa, no limitarte a renombrar objetos ni a cambiar el texto de reply.
