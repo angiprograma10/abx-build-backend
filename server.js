@@ -968,6 +968,21 @@ FIND_INSTANCES: {type,query?,className?}
 INSPECT_PROJECT: {type}
 INSPECT_SELECTION: {type}
 
+PROTOCOLO UNIVERSAL DE CONSTRUCCIÓN PROFESIONAL Y POSICIONAMIENTO
+- Este protocolo se aplica a CADA modelo y a cada petición de construcción. No dependas de que el modelo sea "Pro": planifica explícitamente y usa las capacidades reales del esquema.
+- FASE 1 — INTERPRETAR: identifica el objeto/escena final, estilo, escala, orientación frontal, uso del jugador, piezas esenciales y restricciones. Si no se especifica estilo, elige uno coherente.
+- FASE 2 — BLOQUEO ESPACIAL: define un origen local único para el conjunto, huella X/Z, altura Y, dirección frontal y límites de la construcción. Todas las coordenadas deben derivarse de ese plano; no coloques piezas al azar ni generes una cuadrícula como sustituto del objeto.
+- FASE 3 — LISTA DE PIEZAS: enumera mentalmente cada componente estructural y decorativo por función. Para cada pieza calcula centro XYZ, tamaño XYZ, rotación, material/color y caras de contacto. Evita coordenadas repetidas, tamaños idénticos sin razón, piezas flotantes, colisiones accidentales y elementos fuera de escala.
+- FASE 4 — ORDEN DE MONTAJE: base/suelo primero, luego soportes y paredes, aberturas y conexiones, techo o partes superiores, accesos y por último detalles. Asegura que cada elemento se conecte visual o físicamente con el conjunto.
+- FASE 5 — UBICACIÓN EN STUDIO: mundo físico en Workspace; GUI de jugador bajo StarterGui; lógica de servidor en ServerScriptService; lógica cliente en LocalScripts dentro de StarterGui o StarterPlayerScripts; remotos compartidos en ReplicatedStorage. Elige parent/location explícito cuando el esquema lo requiera. No confundas ubicación en el árbol de instancias con coordenadas 3D.
+- FASE 6 — ESCALA Y CIRCULACIÓN: comprueba que puertas, pasillos, escaleras, saltos y rutas sean utilizables por un personaje Roblox. Reserva espacio libre alrededor de entradas y objetos interactivos. No encierres áreas jugables ni bloquees el spawn.
+- FASE 7 — SELECCIÓN DE HERRAMIENTA: CREATE_STRUCTURE para conjuntos físicos compactos con posiciones explícitas; CREATE_TREE para jerarquías de instancias/UI; CREATE_PART para una pieza; CREATE_SCRIPT solo para comportamiento programado. Combina acciones cuando el usuario pide un sistema mixto. No sustituyas una construcción visual por código que la describa.
+- FASE 8 — AUDITORÍA GEOMÉTRICA: ignora los nombres y observa la forma real. ¿Se reconoce desde frente, lado y arriba? ¿Hay anchura, profundidad y altura? ¿Las partes estructurales están en sus lados correctos? ¿Las aberturas siguen abiertas? ¿Las piezas se apoyan y se conectan? ¿La distribución corresponde al objeto solicitado y no parece una fila de cuadrados?
+- FASE 9 — AUDITORÍA DE ESQUEMA: verifica que cada propiedad y clase estén admitidas, que cada acción quepa en los límites, que los padres y rutas existan y que las dependencias estén ordenadas. Nunca inventes que se aplicó o probó algo.
+- FASE 10 — COMPLETITUD: si el resultado no se reconoce por la geometría sola, rediseña antes de responder. Prefiere una construcción pequeña pero completa frente a muchas piezas sin propósito. Usa el presupuesto permitido para incluir las partes esenciales; no prometas perfección ni añadas duplicados solo para aumentar el conteo.
+- Para edificios, casas, tiendas, árboles, torres, obbies, interiores y mapas, genera una composición 3D coherente, no solo filas o pilas. Para interfaces, crea jerarquía real, posiciones/tamaños diferenciados y márgenes; para sistemas interactivos, combina UI, scripts y remotos donde corresponda.
+- La segunda pasada de revisión debe auditar y corregir el borrador con el MISMO modelo seleccionado por el usuario; nunca elijas otro modelo para revisar en secreto. Si el modelo seleccionado no responde, informa del error en lugar de fingir éxito o sustituirlo silenciosamente.
+
 COMPROBACIÓN FINAL
 - ¿La acción cumple la intención y el esquema?
 - ¿Las piezas tienen posiciones, proporciones, apoyos y recorridos coherentes, sin solapamientos accidentales?
@@ -1216,18 +1231,9 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   session.pendingPlan = null;
 
   try {
-    // Try the chosen model first. Only transient provider failures trigger
-    // fallbacks, and each provider keeps its own model allowlist.
-    const primaryModels = selectedProvider === 'openai'
-      ? [model, ...Array.from(ALLOWED_OPENAI_MODELS).filter(id => id !== model)]
-      : [model, ...Array.from(ALLOWED_MODELS).filter(id => id !== model)];
-    const fallbackModels = selectedProvider === 'openai'
-      ? Array.from(ALLOWED_MODELS)
-      : Array.from(ALLOWED_OPENAI_MODELS);
-    const candidates = [
-      ...primaryModels.map(id => ({ provider: selectedProvider, model: id })),
-      ...fallbackModels.map(id => ({ provider: selectedProvider === 'openai' ? 'gemini' : 'openai', model: id }))
-    ].filter(candidate => candidate.provider === 'openai' ? Boolean(OPENAI_API_KEY) : Boolean(GEMINI_API_KEY));
+    // Respeta estrictamente el modelo solicitado: no cambies de modelo ni proveedor
+    // de forma silenciosa. Si falla, devuelve el error al usuario para que pueda decidir.
+    const candidates = [{ provider: selectedProvider, model }];
 
     let response = null;
     let payload = {};
@@ -1349,13 +1355,10 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
 
     console.info('[ABX_DIAG] primary_result', JSON.stringify({ provider: usedProvider, model: usedModel, draft: summarizeConstructionDraft(parsed) }));
 
-    // Una segunda pasada independiente revisa calidad geométrica, jerarquía y ubicaciones.
-    // Si el revisor falla, se conserva el borrador original en vez de bloquear toda la petición.
-    // Revisión independiente con el modelo más capaz disponible, sin depender del modelo seleccionado.
-    const reviewerProvider = OPENAI_API_KEY ? 'openai' : 'gemini';
-    const reviewerModel = reviewerProvider === 'openai'
-      ? (ALLOWED_OPENAI_MODELS.has(DEFAULT_OPENAI_MODEL) ? DEFAULT_OPENAI_MODEL : 'gpt-5.5')
-      : 'gemini-3.1-pro-preview';
+    // La auditoría geométrica usa el mismo proveedor/modelo que generó el borrador.
+    // Si la revisión falla, se conserva el borrador original para mantener compatibilidad.
+    const reviewerProvider = usedProvider;
+    const reviewerModel = usedModel;
     const reviewerApiKey = reviewerProvider === 'openai' ? OPENAI_API_KEY : GEMINI_API_KEY;
     parsed = await reviewConstructionDraft({
       provider: reviewerProvider,
