@@ -253,10 +253,16 @@ function validateTreeNode(node, state, depth = 0) {
     'Highlight', 'ProximityPrompt', 'ClickDetector',
     'Sound', 'ParticleEmitter', 'Beam', 'Trail',
     'StringValue', 'BoolValue', 'IntValue', 'NumberValue',
-    'ScreenGui', 'Frame', 'TextLabel', 'TextButton',
-    'TextBox', 'ImageLabel', 'ImageButton', 'ScrollingFrame',
-    'UICorner', 'UIStroke', 'UIPadding', 'UIListLayout',
-    'UIGridLayout', 'UIScale', 'UIAspectRatioConstraint'
+    'ScreenGui', 'BillboardGui', 'SurfaceGui', 'Frame', 'ScrollingFrame',
+    'ViewportFrame', 'CanvasGroup', 'TextLabel', 'TextButton', 'TextBox',
+    'ImageLabel', 'ImageButton', 'VideoFrame', 'UICorner', 'UIStroke',
+    'UIGradient', 'UIPadding', 'UIListLayout', 'UIGridLayout', 'UITableLayout',
+    'UIPageLayout', 'UIScale', 'UITextSizeConstraint', 'UIAspectRatioConstraint',
+    'Folder', 'Model', 'Decal', 'Texture', 'SpecialMesh', 'SurfaceAppearance',
+    'Smoke', 'Fire', 'Sparkles', 'Team', 'Atmosphere', 'Sky', 'BloomEffect',
+    'BlurEffect', 'ColorCorrectionEffect', 'DepthOfFieldEffect', 'SunRaysEffect',
+    'RemoteEvent', 'RemoteFunction', 'BindableEvent', 'BindableFunction',
+    'Configuration', 'ObjectValue', 'Color3Value', 'Vector3Value', 'CFrameValue'
   ]);
 
   if (!allowedClasses.has(className)) return null;
@@ -286,24 +292,54 @@ function validateTreeNode(node, state, depth = 0) {
     if (!isObject(node.properties)) return null;
     result.properties = result.properties || {};
     const allowedProperties = new Set([
-      'Text', 'TextSize', 'TextColor3', 'BackgroundColor3',
-      'BackgroundTransparency', 'BorderSizePixel', 'Visible',
-      'Enabled', 'Active', 'Selectable', 'Size', 'Position',
-      'AnchorPoint', 'Rotation', 'ZIndex', 'DisplayOrder',
-      'ResetOnSpawn', 'IgnoreGuiInset', 'AutomaticSize',
-      'TextWrapped', 'TextScaled', 'RichText', 'Font',
-      'LayoutOrder', 'Image', 'ImageTransparency',
-      'CanvasSize', 'ScrollBarThickness', 'CornerRadius',
-      'Thickness', 'Transparency', 'PaddingTop', 'PaddingBottom',
-      'PaddingLeft', 'PaddingRight', 'FillDirection',
-      'HorizontalAlignment', 'VerticalAlignment',
-      'CellSize', 'CellPadding', 'AspectRatio',
-      'Value', 'Brightness', 'Range', 'Angle', 'Enabled',
-      'Anchored', 'CanCollide', 'CanTouch', 'CanQuery',
-      'Transparency', 'Reflectance', 'Material', 'Shape'
+      'Name', 'Text', 'TextSize', 'TextColor3', 'TextTransparency',
+      'TextXAlignment', 'TextYAlignment', 'TextTruncate', 'BackgroundColor3',
+      'BackgroundTransparency', 'BorderColor3', 'BorderSizePixel', 'BorderMode',
+      'Visible', 'Enabled', 'Active', 'Selectable', 'Size', 'Position',
+      'AnchorPoint', 'Rotation', 'Orientation', 'ZIndex', 'DisplayOrder',
+      'ResetOnSpawn', 'IgnoreGuiInset', 'ZIndexBehavior', 'AutomaticSize',
+      'TextWrapped', 'TextScaled', 'RichText', 'Font', 'LayoutOrder',
+      'Image', 'ImageColor3', 'ImageTransparency', 'ScaleType', 'CanvasSize',
+      'AutomaticCanvasSize', 'ScrollBarThickness', 'ScrollBarImageColor3',
+      'CornerRadius', 'Thickness', 'Color', 'Transparency', 'PaddingTop',
+      'PaddingBottom', 'PaddingLeft', 'PaddingRight', 'FillDirection',
+      'HorizontalAlignment', 'VerticalAlignment', 'SortOrder', 'CellSize',
+      'CellPadding', 'AspectRatio', 'AspectType', 'DominantAxis', 'Value',
+      'Brightness', 'Range', 'Angle', 'Anchored', 'CanCollide', 'CanTouch',
+      'CanQuery', 'Reflectance', 'Material', 'MaterialVariant', 'Shape',
+      'CastShadow', 'Massless', 'MaxSpeed', 'Torque', 'TurnSpeed',
+      'HoldDuration', 'MaxActivationDistance', 'ActionText', 'ObjectText',
+      'RequiresLineOfSight', 'KeyboardKeyCode', 'StudsOffset', 'AlwaysOnTop',
+      'LightInfluence', 'MaxDistance', 'Face', 'CanvasSize', 'PixelsPerStud',
+      'Texture', 'TextureID', 'TextureId', 'Color3', 'SoundId', 'Volume',
+      'PlaybackSpeed', 'Looped', 'Rate', 'Lifetime', 'Speed', 'SpreadAngle',
+      'Enabled', 'Intensity', 'Size', 'Contrast', 'Saturation', 'TintColor',
+      'Density', 'Haze', 'Glare', 'Decay', 'ColorMap', 'NormalMap',
+      'MetalnessMap', 'RoughnessMap', 'MeshId', 'MeshType', 'Scale', 'Offset',
+      'TeamColor', 'AutoAssignable', 'Brightness', 'Enabled'
     ]);
+    const propertyAliases = {
+      name:'Name', text:'Text', textsize:'TextSize', textcolor3:'TextColor3',
+      texttransparency:'TextTransparency', backgroundcolor3:'BackgroundColor3',
+      backgroundtransparency:'BackgroundTransparency', bordersizepixel:'BorderSizePixel',
+      visible:'Visible', enabled:'Enabled', active:'Active', selectable:'Selectable',
+      size:'Size', position:'Position', anchorpoint:'AnchorPoint', rotation:'Rotation',
+      orientation:'Orientation', zindex:'ZIndex', displayorder:'DisplayOrder',
+      resetonspawn:'ResetOnSpawn', ignoreguiinset:'IgnoreGuiInset',
+      automaticcanvasize:'AutomaticCanvasSize', textwrapped:'TextWrapped',
+      textscaled:'TextScaled', richtext:'RichText', font:'Font', layoutorder:'LayoutOrder',
+      image:'Image', imagecolor3:'ImageColor3', imagetransparency:'ImageTransparency',
+      canvassize:'CanvasSize', scrollbarthickness:'ScrollBarThickness',
+      cornerradius:'CornerRadius', thickness:'Thickness', transparency:'Transparency',
+      filldirection:'FillDirection', horizontalalignment:'HorizontalAlignment',
+      verticalalignment:'VerticalAlignment', cellsize:'CellSize', cellpadding:'CellPadding',
+      anchored:'Anchored', cancollide:'CanCollide', cantouch:'CanTouch', canquery:'CanQuery',
+      reflectance:'Reflectance', material:'Material', materialvariant:'MaterialVariant',
+      shape:'Shape', castshadow:'CastShadow', color:'Color', teamcolor:'TeamColor'
+    };
 
-    for (const [key, value] of Object.entries(node.properties)) {
+    for (const [rawKey, value] of Object.entries(node.properties)) {
+      const key = propertyAliases[rawKey.toLowerCase()] || rawKey;
       if (!allowedProperties.has(key)) continue;
       if (typeof value === 'string') {
         result.properties[key] = value.slice(0, 500);
@@ -469,9 +505,14 @@ function validateAction(raw) {
       const tree = validateTreeNode(root, state);
       if (!tree) return null;
 
+      const rootClass = cleanText(root?.className || root?.class, 50);
+      const treeParent = rootClass === 'ScreenGui'
+        ? (ALLOWED_PARENTS.has(raw.parent) && raw.parent !== 'Workspace'
+          ? raw.parent : 'StarterGui')
+        : validParent(raw.parent);
       return {
         type: raw.type,
-        parent: validParent(raw.parent),
+        parent: treeParent,
         root: tree,
         tree
       };
