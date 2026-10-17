@@ -227,7 +227,7 @@ function removeExactDuplicateVolumes(parts) {
   for (let i = parts.length - 1; i >= 0; i--) {
     const part = parts[i];
     const key = [
-      ...part.position, ...part.size, ...part.rotation
+      part.shape, ...part.position, ...part.size, ...part.rotation
     ].map(n => Number(n).toFixed(3)).join('|');
     const duplicate = seen.has(key) && part.transparency === 0;
     if (!duplicate) {
