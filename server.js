@@ -1113,7 +1113,7 @@ function summarizeConstructionDraft(value) {
 }
 
 async function reviewConstructionDraft({ provider, model, apiKey, message, draft, history, signal }) {
-  const isBuildTask = /\\b(construye|construir|crea|crear|haz|hacer|diseña|diseñar|genera|generar|arma|armar|edifica|edificar|mueve|mover|acomoda|acomodar|coloca|colocar|posiciona|posicionar|reubica|reubicar|traslada|trasladar|alinea|alinear|gira|girar|rota|rotar|escala|escalar|eleva|elevar|baja|bajar|acerca|acercar|aleja|alejar|separa|separar|modifica|modificar|ajusta|ajustar|arregla|arreglar|corrige|corregir|build|create|make|design|generate|move|place|position|rotate|scale|align|edit|modify|house|tower|mapa|casa|edificio|torre|obby|interfaz|ui|juego|game)\\b/i.test(message);
+  const isBuildTask = /\b(construye|construir|crea|crear|haz|hacer|diseña|diseñar|genera|generar|arma|armar|edifica|edificar|mueve|mover|acomoda|acomodar|coloca|colocar|posiciona|posicionar|reubica|reubicar|traslada|trasladar|alinea|alinear|gira|girar|rota|rotar|escala|escalar|eleva|elevar|baja|bajar|acerca|acercar|aleja|alejar|separa|separar|modifica|modificar|ajusta|ajustar|arregla|arreglar|corrige|corregir|build|create|make|design|generate|move|place|position|rotate|scale|align|edit|modify|house|tower|mapa|casa|edificio|torre|obby|interfaz|ui|juego|game)\b/i.test(message);
   const actions = Array.isArray(draft?.actions) ? draft.actions : (draft?.action ? [draft.action] : []);
   const needsReview = actions.some(action =>
     action && ['CREATE_STRUCTURE','CREATE_TREE','CREATE_PART','CREATE_GUI','CREATE_SCRIPT','CREATE_SYSTEM','CREATE_OBJECT','SET_PROPERTIES','SET_ATTRIBUTE','MOVE_INSTANCE','DUPLICATE_INSTANCE','DELETE_INSTANCE'].includes(action.type)
