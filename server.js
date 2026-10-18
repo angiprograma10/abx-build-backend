@@ -1480,9 +1480,37 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
               max_output_tokens: CONFIG.maxOutputTokens
             })
           });
+        } else if (candidate.provider === 'groq' || candidate.provider === 'mistral') {
+          const chatMessages = [
+            { role: 'system', content: SYSTEM_INSTRUCTION },
+            ...history.map(item => ({
+              role: item.role === 'model' ? 'assistant' : 'user',
+              content: item.parts.map(part => part.text || '').join('')
+            })),
+            { role: 'user', content: effectiveMessage }
+          ];
+          const providerModel = candidate.model.replace(/^(groq|mistral)\//, '');
+          const endpoint = candidate.provider === 'groq'
+            ? 'https://api.groq.com/openai/v1/chat/completions'
+            : 'https://api.mistral.ai/v1/chat/completions';
+          candidateResponse = await fetch(endpoint, {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + apiKeyForProvider(candidate.provider)
+            },
+            body: JSON.stringify({
+              model: providerModel,
+              messages: chatMessages,
+              response_format: { type: 'json_object' },
+              temperature: 0.15,
+              max_tokens: CONFIG.maxOutputTokens
+            })
+          });
         } else {
           candidateResponse = await fetch(
-            'https://generativelanguage.googleapis.com/v1beta/models/' +
+            'https://generativelanguage.googleapis.com/v1beta/models/'
               encodeURIComponent(candidate.model) + ':generateContent',
             {
               method: 'POST',
