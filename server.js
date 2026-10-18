@@ -23,7 +23,7 @@ const CONFIG = Object.freeze({
   maxHistoryItems: 20,
   maxHistoryText: 1800,
   maxOutputTokens: 16000,
-  geminiTimeoutMs: 30000,
+  geminiTimeoutMs: 90000,
   sessionTtlMs: 6 * 60 * 60 * 1000,
   maxQueuedActions: 40,
   maxPlanActions: 30,
@@ -1462,7 +1462,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             { role: 'user', content: effectiveMessage }
           ];
           const baseUrl = candidate.provider === 'deepseek'
-            ? 'https://api.deepseek.com/v1/responses'
+            ? 'https://api.deepseek.com/responses'
             : 'https://api.openai.com/v1/responses';
           candidateResponse = await fetch(baseUrl, {
             method: 'POST',
@@ -1556,9 +1556,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
       console.error('Error de proveedor IA:', usedProvider, usedModel, response.status, providerError);
       return res.status(502).json({
         ok: false,
-        error: usedProvider === 'openai'
-          ? 'El modelo seleccionado (' + usedModel + ') no pudo responder (HTTP ' + response.status + '). ABX Build no cambió a otro modelo. Revisa el acceso al modelo, la clave y el saldo de la API.'
-          : 'El modelo seleccionado (' + usedModel + ') no pudo responder (HTTP ' + response.status + '). ABX Build no cambió a otro modelo. Revisa el acceso al modelo, la cuota y la configuración de Gemini.'
+        error: 'El modelo seleccionado (' + usedModel + ') del proveedor ' + usedProvider + ' no pudo responder (HTTP ' + response.status + '). ABX Build no cambió a otro modelo. Revisa que la clave API, el acceso al modelo y el saldo/cuota del proveedor estén correctos.'
       });
     }
 
