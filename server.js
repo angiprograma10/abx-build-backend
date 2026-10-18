@@ -12,6 +12,8 @@ app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 0));
 const PORT = Number(process.env.PORT || 3000);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
 
@@ -48,6 +50,27 @@ const ALLOWED_OPENAI_MODELS = new Set([
   'gpt-5.5',
   'gpt-5.4-mini'
 ]);
+const ALLOWED_ANTHROPIC_MODELS = new Set([
+  'claude-sonnet-5-5',
+  'claude-opus-5-5',
+  'claude-haiku-5-5'
+]);
+const ALLOWED_DEEPSEEK_MODELS = new Set([
+  'deepseek-flash',
+  'deepseek-v4-pro'
+]);
+function providerForModel(model) {
+  if (ALLOWED_OPENAI_MODELS.has(model)) return 'openai';
+  if (ALLOWED_ANTHROPIC_MODELS.has(model)) return 'anthropic';
+  if (ALLOWED_DEEPSEEK_MODELS.has(model)) return 'deepseek';
+  return 'gemini';
+}
+function apiKeyForProvider(provider) {
+  return provider === 'openai' ? OPENAI_API_KEY
+    : provider === 'anthropic' ? ANTHROPIC_API_KEY
+    : provider === 'deepseek' ? DEEPSEEK_API_KEY
+    : GEMINI_API_KEY;
+}
 
 const ALLOWED_PARENTS = new Set([
   'Workspace', 'ReplicatedStorage', 'ServerStorage',
@@ -773,14 +796,17 @@ app.get('/', (_req, res) => {
     ok: true,
     service: 'ABX Build Backend',
     version: '2.8.0',
-    aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY),
+    aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY || ANTHROPIC_API_KEY || DEEPSEEK_API_KEY),
     providers: {
       gemini: Boolean(GEMINI_API_KEY),
-      openai: Boolean(OPENAI_API_KEY)
+      openai: Boolean(OPENAI_API_KEY),
+      anthropic: Boolean(ANTHROPIC_API_KEY),
+      deepseek: Boolean(DEEPSEEK_API_KEY)
     },
     features: [
       'session-queue', 'action-validation',
-      'roblox-create-edit-inspect', 'gemini-chat', 'openai-responses'
+      'roblox-create-edit-inspect', 'gemini-chat', 'openai-responses',
+      'anthropic-messages', 'deepseek-responses'
     ]
   });
 });
@@ -1213,6 +1239,8 @@ function summarizeConstructionDraft(value) {
 }
 
 async function reviewConstructionDraft({ provider, model, apiKey, message, draft, history, signal }) {
+  // Este revisor solo implementa los protocolos Gemini/OpenAI; evita llamar por error a Gemini con otra clave.
+  if (provider !== 'openai' && provider !== 'gemini') return draft;
   const isBuildTask = /\b(construye|construir|crea|crear|haz|hacer|diseña|diseñar|genera|generar|arma|armar|edifica|edificar|mueve|mover|acomoda|acomodar|coloca|colocar|posiciona|posicionar|reubica|reubicar|traslada|trasladar|alinea|alinear|gira|girar|rota|rotar|escala|escalar|eleva|elevar|baja|bajar|acerca|acercar|aleja|alejar|separa|separar|modifica|modificar|ajusta|ajustar|arregla|arreglar|corrige|corregir|build|create|make|design|generate|move|place|position|rotate|scale|align|edit|modify|house|tower|mapa|casa|edificio|torre|obby|interfaz|ui|juego|game)\b/i.test(message);
   const actions = Array.isArray(draft?.actions) ? draft.actions : (draft?.action ? [draft.action] : []);
   const needsReview = actions.some(action =>
@@ -1367,25 +1395,27 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   const envModel = cleanText(DEFAULT_MODEL, 80);
   const openaiEnvModel = cleanText(DEFAULT_OPENAI_MODEL, 80);
   const validRequested = ALLOWED_MODELS.has(requestedModel) ||
-    ALLOWED_OPENAI_MODELS.has(requestedModel);
+    ALLOWED_OPENAI_MODELS.has(requestedModel) ||
+    ALLOWED_ANTHROPIC_MODELS.has(requestedModel) ||
+    ALLOWED_DEEPSEEK_MODELS.has(requestedModel);
   const model = validRequested
     ? requestedModel
     : (ALLOWED_MODELS.has(envModel) ? envModel
       : (ALLOWED_OPENAI_MODELS.has(openaiEnvModel) ? openaiEnvModel : 'gemini-3.5-flash-lite'));
-  const selectedProvider = ALLOWED_OPENAI_MODELS.has(model) ? 'openai' : 'gemini';
+  const selectedProvider = providerForModel(model);
 
   // Respect the selected provider: missing credentials are a clear configuration
   // error, rather than silently running a different provider than the user chose.
-  if (selectedProvider === 'openai' && !OPENAI_API_KEY) {
+  if (!apiKeyForProvider(selectedProvider)) {
+    const keyName = {
+      openai: 'OPENAI_API_KEY',
+      gemini: 'GEMINI_API_KEY',
+      anthropic: 'ANTHROPIC_API_KEY',
+      deepseek: 'DEEPSEEK_API_KEY'
+    }[selectedProvider];
     return res.status(503).json({
       ok: false,
-      error: 'Falta configurar OPENAI_API_KEY como variable secreta en Render.'
-    });
-  }
-  if (selectedProvider === 'gemini' && !GEMINI_API_KEY) {
-    return res.status(503).json({
-      ok: false,
-      error: 'Falta configurar GEMINI_API_KEY en el backend.'
+      error: 'El modelo seleccionado necesita configurar ' + keyName + ' como variable secreta en Render.'
     });
   }
 
@@ -1423,7 +1453,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
       if (controller.signal.aborted) break;
       try {
         let candidateResponse;
-        if (candidate.provider === 'openai') {
+        if (candidate.provider === 'openai' || candidate.provider === 'deepseek') {
           const openAIInput = [
             ...history.map(item => ({
               role: item.role === 'model' ? 'assistant' : 'user',
@@ -1431,12 +1461,15 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             })),
             { role: 'user', content: effectiveMessage }
           ];
-          candidateResponse = await fetch('https://api.openai.com/v1/responses', {
+          const baseUrl = candidate.provider === 'deepseek'
+            ? 'https://api.deepseek.com/v1/responses'
+            : 'https://api.openai.com/v1/responses';
+          candidateResponse = await fetch(baseUrl, {
             method: 'POST',
             signal: controller.signal,
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + OPENAI_API_KEY
+              'Authorization': 'Bearer ' + apiKeyForProvider(candidate.provider)
             },
             body: JSON.stringify({
               model: candidate.model,
@@ -1444,6 +1477,30 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
               input: openAIInput,
               text: { format: { type: 'json_object' } },
               max_output_tokens: CONFIG.maxOutputTokens
+            })
+          });
+        } else if (candidate.provider === 'anthropic') {
+          const anthropicMessages = [
+            ...history.map(item => ({
+              role: item.role === 'model' ? 'assistant' : 'user',
+              content: item.parts.map(part => part.text || '').join('')
+            })),
+            { role: 'user', content: effectiveMessage }
+          ];
+          candidateResponse = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model: candidate.model,
+              system: SYSTEM_INSTRUCTION + '\\n\\nReturn only one valid JSON object with keys "reply" and "actions" (or "action" for a single action). No Markdown fences.',
+              messages: anthropicMessages,
+              max_tokens: CONFIG.maxOutputTokens,
+              temperature: 0.15
             })
           });
         } else {
@@ -1506,7 +1563,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     }
 
     let output = '';
-    if (usedProvider === 'openai') {
+    if (usedProvider === 'openai' || usedProvider === 'deepseek') {
       output = Array.isArray(payload?.output)
         ? payload.output
             .filter(item => item.type === 'message' && Array.isArray(item.content))
@@ -1515,6 +1572,11 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             .map(item => item.text)
             .join('')
             .trim()
+        : '';
+    } else if (usedProvider === 'anthropic') {
+      output = Array.isArray(payload?.content)
+        ? payload.content.filter(item => item.type === 'text' && typeof item.text === 'string')
+            .map(item => item.text).join('').trim()
         : '';
     } else {
       output = payload?.candidates?.[0]?.content?.parts
@@ -1537,7 +1599,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     // Si la revisión falla, se conserva el borrador original para mantener compatibilidad.
     const reviewerProvider = usedProvider;
     const reviewerModel = usedModel;
-    const reviewerApiKey = reviewerProvider === 'openai' ? OPENAI_API_KEY : GEMINI_API_KEY;
+    const reviewerApiKey = apiKeyForProvider(reviewerProvider);
     parsed = await reviewConstructionDraft({
       provider: reviewerProvider,
       model: reviewerModel,
