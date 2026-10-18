@@ -14,7 +14,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
-const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.5';
+const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4-mini';
 
 const CONFIG = Object.freeze({
   bodyLimit: '256kb',
@@ -46,7 +46,7 @@ const ALLOWED_MODELS = new Set([
   'gemini-3-flash-preview'
 ]);
 const ALLOWED_OPENAI_MODELS = new Set([
-  'gpt-5.5',
+  'gpt-5.4-nano',
   'gpt-5.4-mini'
 ]);
 const ALLOWED_DEEPSEEK_MODELS = new Set([
