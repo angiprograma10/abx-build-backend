@@ -238,6 +238,35 @@ function removeExactDuplicateVolumes(parts) {
   return kept.reverse();
 }
 
+
+const GUI_VISUAL = new Set(['Frame','ScrollingFrame','TextLabel','TextButton','TextBox','ImageLabel','ImageButton','ViewportFrame','CanvasGroup']);
+const GUI_LAYOUT = new Set(['UIListLayout','UIGridLayout','UIPageLayout','UITableLayout']);
+
+function repairGuiLayout(node) {
+  if (!node || !Array.isArray(node.children)) return;
+  const layouts = node.children.filter(child => GUI_LAYOUT.has(child.className));
+  const visual = node.children.filter(child => GUI_VISUAL.has(child.className));
+  const positioned = visual.filter(child => child.properties && child.properties.Position);
+  if (layouts.length && positioned.length) {
+    node.children = node.children.filter(child => !GUI_LAYOUT.has(child.className));
+  }
+  const hasLayout = node.children.some(child => GUI_LAYOUT.has(child.className));
+  if (!hasLayout && visual.length > 1 && positioned.length === 0 && node.className !== 'ScreenGui') {
+    visual.forEach((child, index) => {
+      child.properties = child.properties || {};
+      if (!child.properties.Size) {
+        child.properties.Size = child.className === 'TextButton' || child.className === 'ImageButton'
+          ? [1, -24, 0, 40]
+          : [1, -24, 0, 32];
+      }
+      if (!child.properties.Position) {
+        child.properties.Position = [0, 12, 0, 12 + index * 48];
+      }
+    });
+  }
+  node.children.forEach(repairGuiLayout);
+}
+
 function validateTreeNode(node, state, depth = 0) {
   if (!isObject(node) || depth > CONFIG.maxTreeDepth) return null;
   state.count++;
@@ -338,9 +367,19 @@ function validateTreeNode(node, state, depth = 0) {
       shape:'Shape', castshadow:'CastShadow', color:'Color', teamcolor:'TeamColor'
     };
 
-    for (const [rawKey, value] of Object.entries(node.properties)) {
+    for (const [rawKey, rawValue] of Object.entries(node.properties)) {
       const key = propertyAliases[rawKey.toLowerCase()] || rawKey;
       if (!allowedProperties.has(key)) continue;
+      let value = rawValue;
+      // The model often copies the SET_PROPERTIES {value, kind} shape into
+      // CREATE_TREE. Those objects used to be dropped, so Size and Position
+      // never reached Studio and every element stacked at the top-left.
+      if (isObject(value) && !Array.isArray(value) && Object.prototype.hasOwnProperty.call(value, 'value')) {
+        value = value.value;
+      }
+      if (isObject(value) && !Array.isArray(value) && typeof value.name === 'string') {
+        value = value.name;
+      }
       if (typeof value === 'string') {
         result.properties[key] = value.slice(0, 500);
       } else if (typeof value === 'number' && Number.isFinite(value)) {
@@ -504,6 +543,9 @@ function validateAction(raw) {
       const state = { count: 0 };
       const tree = validateTreeNode(root, state);
       if (!tree) return null;
+      if (tree.className === 'ScreenGui' || tree.className === 'BillboardGui' || tree.className === 'SurfaceGui') {
+        repairGuiLayout(tree);
+      }
 
       const rootClass = cleanText(root?.className || root?.class, 50);
       const treeParent = rootClass === 'ScreenGui'
@@ -999,6 +1041,9 @@ CONSTRUCCIÓN 3D: DISEÑA, NO AMONTONES
 INTERFACES VISUALES: CREA INSTANCIAS REALES
 - No te limites a generar código cuando la petición sea visual. Usa CREATE_TREE para construir una jerarquía real de ScreenGui, Frame, TextLabel, TextButton, TextBox, ImageLabel/ImageButton, ScrollingFrame y componentes de diseño permitidos.
 - CREATE_GUI es solo para una GUI de muestra sencilla; para una interfaz profesional o personalizada, usa CREATE_TREE.
+- CONTRATO DE ACOMODO: dentro de CREATE_TREE, Size y Position son arreglos de 4 números [scaleX, offsetX, scaleY, offsetY]. AnchorPoint es [x, y]. Los colores son [r, g, b] de 0 a 255. No uses objetos {value, kind} dentro de CREATE_TREE.
+- No mezcles UIListLayout o UIGridLayout con hijos que también tengan Position. El layout automático borra el acomodo manual. Elige uno.
+- Receta de pantalla: ScreenGui, luego un Frame principal con AnchorPoint [0.5, 0.5], Position [0.5, 0, 0.5, 0] y Size [0, 440, 0, 540], más UICorner y UIPadding. Dentro, título, zona de contenido y botones con tamaños distintos, separados al menos 12 px, sin poner todo en 0,0. Botones de al menos 40 px de alto. Paleta de 2 o 3 colores y texto legible.
 - Planifica la composición: contenedor principal, cabecera, contenido, acciones y pie cuando corresponda. Usa tamaños/posiciones UDim2 explícitos, AnchorPoint, ZIndex, DisplayOrder y LayoutOrder coherentes.
 - Mantén contraste, tipografía, márgenes, alineación, espacios y jerarquía visual consistentes. Evita controles amontonados, texto cortado, elementos fuera de pantalla y botones puramente decorativos.
 - Usa UICorner, UIStroke, UIPadding, UIListLayout, UIGridLayout, UIScale o UIAspectRatioConstraint cuando aporten valor. Ten en cuenta móvil y escritorio.
