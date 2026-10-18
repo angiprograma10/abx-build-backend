@@ -796,16 +796,18 @@ app.get('/', (_req, res) => {
     ok: true,
     service: 'ABX Build Backend',
     version: '2.8.0',
-    aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY || DEEPSEEK_API_KEY),
+    aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY || DEEPSEEK_API_KEY || GROQ_API_KEY || MISTRAL_API_KEY),
     providers: {
       gemini: Boolean(GEMINI_API_KEY),
       openai: Boolean(OPENAI_API_KEY),
-      deepseek: Boolean(DEEPSEEK_API_KEY)
+      deepseek: Boolean(DEEPSEEK_API_KEY),
+      groq: Boolean(GROQ_API_KEY),
+      mistral: Boolean(MISTRAL_API_KEY)
     },
     features: [
       'session-queue', 'action-validation',
       'roblox-create-edit-inspect', 'gemini-chat', 'openai-responses',
-      'deepseek-responses'
+      'deepseek-responses', 'groq-chat-completions', 'mistral-chat-completions'
     ]
   });
 });
@@ -1576,6 +1578,9 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             .join('')
             .trim()
         : '';
+    } else if (usedProvider === 'groq' || usedProvider === 'mistral') {
+      const content = payload?.choices?.[0]?.message?.content;
+      output = typeof content === 'string' ? content.trim() : '';
     } else {
       output = payload?.candidates?.[0]?.content?.parts
         ?.map(part => typeof part.text === 'string' ? part.text : '')
