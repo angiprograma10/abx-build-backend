@@ -817,10 +817,13 @@ app.get('/health', (_req, res) => {
     ok: true,
     uptime: Math.floor(process.uptime()),
     activeSessions: sessions.size,
-    aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY),
+    aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY || DEEPSEEK_API_KEY || GROQ_API_KEY || MISTRAL_API_KEY),
     providers: {
       gemini: Boolean(GEMINI_API_KEY),
-      openai: Boolean(OPENAI_API_KEY)
+      openai: Boolean(OPENAI_API_KEY),
+      deepseek: Boolean(DEEPSEEK_API_KEY),
+      groq: Boolean(GROQ_API_KEY),
+      mistral: Boolean(MISTRAL_API_KEY)
     }
   });
 });
