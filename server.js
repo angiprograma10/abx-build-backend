@@ -13,6 +13,8 @@ const PORT = Number(process.env.PORT || 3000);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || '';
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4-mini';
 
@@ -53,14 +55,20 @@ const ALLOWED_DEEPSEEK_MODELS = new Set([
   'deepseek-flash',
   'deepseek-v4-pro'
 ]);
+const ALLOWED_GROQ_MODELS = new Set(['groq/openai/gpt-oss-20b', 'groq/openai/gpt-oss-120b']);
+const ALLOWED_MISTRAL_MODELS = new Set(['mistral/ministral-3b-2512', 'mistral/ministral-8b-2512']);
 function providerForModel(model) {
   if (ALLOWED_OPENAI_MODELS.has(model)) return 'openai';
   if (ALLOWED_DEEPSEEK_MODELS.has(model)) return 'deepseek';
+  if (ALLOWED_GROQ_MODELS.has(model)) return 'groq';
+  if (ALLOWED_MISTRAL_MODELS.has(model)) return 'mistral';
   return 'gemini';
 }
 function apiKeyForProvider(provider) {
   return provider === 'openai' ? OPENAI_API_KEY
     : provider === 'deepseek' ? DEEPSEEK_API_KEY
+    : provider === 'groq' ? GROQ_API_KEY
+    : provider === 'mistral' ? MISTRAL_API_KEY
     : GEMINI_API_KEY;
 }
 
@@ -1387,7 +1395,9 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   const openaiEnvModel = cleanText(DEFAULT_OPENAI_MODEL, 80);
   const validRequested = ALLOWED_MODELS.has(requestedModel) ||
     ALLOWED_OPENAI_MODELS.has(requestedModel) ||
-    ALLOWED_DEEPSEEK_MODELS.has(requestedModel);
+    ALLOWED_DEEPSEEK_MODELS.has(requestedModel) ||
+    ALLOWED_GROQ_MODELS.has(requestedModel) ||
+    ALLOWED_MISTRAL_MODELS.has(requestedModel);
   const model = validRequested
     ? requestedModel
     : (ALLOWED_MODELS.has(envModel) ? envModel
@@ -1400,7 +1410,9 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     const keyName = {
       openai: 'OPENAI_API_KEY',
       gemini: 'GEMINI_API_KEY',
-      deepseek: 'DEEPSEEK_API_KEY'
+      deepseek: 'DEEPSEEK_API_KEY',
+      groq: 'GROQ_API_KEY',
+      mistral: 'MISTRAL_API_KEY'
     }[selectedProvider];
     return res.status(503).json({
       ok: false,
