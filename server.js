@@ -47,14 +47,8 @@ const ALLOWED_MODELS = new Set([
   'gemini-3.5-flash',
   'gemini-3-flash-preview'
 ]);
-const ALLOWED_OPENAI_MODELS = new Set([
-  'gpt-5.4-nano',
-  'gpt-5.4-mini'
-]);
-const ALLOWED_DEEPSEEK_MODELS = new Set([
-  'deepseek-flash',
-  'deepseek-v4-pro'
-]);
+const ALLOWED_OPENAI_MODELS = new Set();
+const ALLOWED_DEEPSEEK_MODELS = new Set();
 const ALLOWED_GROQ_MODELS = new Set(['groq/openai/gpt-oss-20b', 'groq/openai/gpt-oss-120b']);
 const ALLOWED_MISTRAL_MODELS = new Set(['mistral/ministral-3b-2512', 'mistral/ministral-8b-2512']);
 function providerForModel(model) {
@@ -1406,7 +1400,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   const model = validRequested
     ? requestedModel
     : (ALLOWED_MODELS.has(envModel) ? envModel
-      : (ALLOWED_OPENAI_MODELS.has(openaiEnvModel) ? openaiEnvModel : 'gemini-3.5-flash-lite'));
+      : 'gemini-3.5-flash-lite');
   const selectedProvider = providerForModel(model);
 
   // Respect the selected provider: missing credentials are a clear configuration
