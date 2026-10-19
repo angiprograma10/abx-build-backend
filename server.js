@@ -1509,7 +1509,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
           });
         } else {
           candidateResponse = await fetch(
-            'https://generativelanguage.googleapis.com/v1beta/models/'
+            'https://generativelanguage.googleapis.com/v1beta/models/' +
               encodeURIComponent(candidate.model) + ':generateContent',
             {
               method: 'POST',
