@@ -1,4 +1,3 @@
-
 'use strict';
 
 const express = require('express');
@@ -1853,4 +1852,3 @@ function shutdown(signal) {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
-
