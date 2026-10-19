@@ -49,8 +49,8 @@ const ALLOWED_MODELS = new Set([
 ]);
 const ALLOWED_OPENAI_MODELS = new Set();
 const ALLOWED_DEEPSEEK_MODELS = new Set();
-const ALLOWED_GROQ_MODELS = new Set(['groq/openai/gpt-oss-20b', 'groq/openai/gpt-oss-120b']);
-const ALLOWED_MISTRAL_MODELS = new Set(['mistral/ministral-3b-2512', 'mistral/ministral-8b-2512']);
+const ALLOWED_GROQ_MODELS = new Set(['groq/qwen/qwen3.8-27b']);
+const ALLOWED_MISTRAL_MODELS = new Set(['mistral/mistral-small-2603']);
 function providerForModel(model) {
   if (ALLOWED_OPENAI_MODELS.has(model)) return 'openai';
   if (ALLOWED_DEEPSEEK_MODELS.has(model)) return 'deepseek';
