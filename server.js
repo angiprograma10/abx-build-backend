@@ -49,8 +49,8 @@ const ALLOWED_MODELS = new Set([
 ]);
 const ALLOWED_OPENAI_MODELS = new Set();
 const ALLOWED_DEEPSEEK_MODELS = new Set();
-const ALLOWED_GROQ_MODELS = new Set(['groq/qwen/qwen3.8-27b']);
-const ALLOWED_MISTRAL_MODELS = new Set(['mistral/mistral-small-2603']);
+const ALLOWED_GROQ_MODELS = new Set(['groq/openai/gpt-oss-120b']);
+const ALLOWED_MISTRAL_MODELS = new Set(['mistral/ministral-14b-2512']);
 function providerForModel(model) {
   if (ALLOWED_OPENAI_MODELS.has(model)) return 'openai';
   if (ALLOWED_DEEPSEEK_MODELS.has(model)) return 'deepseek';
@@ -1361,6 +1361,16 @@ function parseModelJson(output) {
     const result = JSON.parse(cleaned);
     return isObject(result) ? result : null;
   } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        const result = JSON.parse(cleaned.slice(start, end + 1));
+        return isObject(result) ? result : null;
+      } catch {
+        return null;
+      }
+    }
     return null;
   }
 }
@@ -1447,6 +1457,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     let payload = {};
     let usedModel = model;
     let usedProvider = selectedProvider;
+    let resolvedModel = null;
 
     for (let i = 0; i < candidates.length; i++) {
       const candidate = candidates[i];
@@ -1488,25 +1499,46 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             })),
             { role: 'user', content: effectiveMessage }
           ];
-          const providerModel = candidate.model.replace(/^(groq|mistral)\//, '');
+          const primaryModel = candidate.model.replace(/^(groq|mistral)\//, '');
+          const backupModels = candidate.provider === 'groq'
+            ? ['openai/gpt-oss-120b', 'openai/gpt-oss-20b']
+            : ['ministral-14b-2512', 'ministral-8b-2512'];
+          const modelIds = [primaryModel, ...backupModels.filter(id => id !== primaryModel)];
           const endpoint = candidate.provider === 'groq'
             ? 'https://api.groq.com/openai/v1/chat/completions'
             : 'https://api.mistral.ai/v1/chat/completions';
-          candidateResponse = await fetch(endpoint, {
-            method: 'POST',
-            signal: controller.signal,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + apiKeyForProvider(candidate.provider)
-            },
-            body: JSON.stringify({
-              model: providerModel,
-              messages: chatMessages,
-              response_format: { type: 'json_object' },
-              temperature: 0.15,
-              max_tokens: CONFIG.maxOutputTokens
-            })
-          });
+          let lastResponse = null;
+          for (const providerModel of modelIds) {
+            for (const strict of [true, false]) {
+              const body = {
+                model: providerModel,
+                messages: chatMessages,
+                max_tokens: strict ? 6000 : 3500
+              };
+              if (strict) {
+                body.response_format = { type: 'json_object' };
+                body.temperature = 0.2;
+              }
+              lastResponse = await fetch(endpoint, {
+                method: 'POST',
+                signal: controller.signal,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer ' + apiKeyForProvider(candidate.provider)
+                },
+                body: JSON.stringify(body)
+              });
+              if (lastResponse.ok) {
+                candidateResponse = lastResponse;
+                resolvedModel = (candidate.provider === 'groq' ? 'groq/' : 'mistral/') + providerModel;
+                break;
+              }
+              const status = lastResponse.status;
+              if (![400, 404, 422].includes(status)) break;
+            }
+            if (candidateResponse && candidateResponse.ok) break;
+          }
+          if (!candidateResponse) candidateResponse = lastResponse;
         } else {
           candidateResponse = await fetch(
             'https://generativelanguage.googleapis.com/v1beta/models/' +
@@ -1534,7 +1566,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
         const candidatePayload = await candidateResponse.json().catch(() => ({}));
         response = candidateResponse;
         payload = candidatePayload;
-        usedModel = candidate.model;
+        usedModel = resolvedModel || candidate.model;
         usedProvider = candidate.provider;
 
         const retryable = [408, 429, 500, 502, 503, 504].includes(candidateResponse.status);
@@ -1577,7 +1609,10 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
         : '';
     } else if (usedProvider === 'groq' || usedProvider === 'mistral') {
       const content = payload?.choices?.[0]?.message?.content;
-      output = typeof content === 'string' ? content.trim() : '';
+      if (typeof content === 'string') output = content.trim();
+      else if (Array.isArray(content)) {
+        output = content.map(part => typeof part === 'string' ? part : (part?.text || '')).join('').trim();
+      }
     } else {
       output = payload?.candidates?.[0]?.content?.parts
         ?.map(part => typeof part.text === 'string' ? part.text : '')
