@@ -954,6 +954,30 @@ app.get('/poll/:code', rateLimit(120), (req, res) => {
   });
 });
 
+const GROQ_INSTRUCTION = `
+Eres ABX Build, ingeniero de Roblox Studio. Responde SOLO con JSON válido, sin Markdown.
+Forma: {"reply":"texto breve","actions":[{"type":"..."}]}
+Usa actions:[] solo si el usuario pregunta y no pide crear, editar o reparar. No uses la propiedad action.
+Da tu mejor resultado completo. No entregues un boceto mínimo.
+
+ACCIONES
+CREATE_PART: {type,name,parent,size,position,rotation,color,shape,material,transparency,anchored,canCollide}
+CREATE_STRUCTURE: {type,name,parent,parts:[...]}, máximo 60 piezas. Cada pieza: name,size[x,y,z],position[x,y,z],rotation,color,shape,material,anchored,canCollide.
+CREATE_TREE: {type,parent,root:{name,className,properties,children}}. Máximo 300 nodos. Para UI la raíz es ScreenGui y parent es StarterGui.
+CREATE_SCRIPT: {type,name,location,source}. Máximo 10000 caracteres. Sin loadstring, require(, getfenv, setfenv, InsertService ni HttpService.
+CREATE_FOLDER, CREATE_VALUE, CREATE_REMOTE, CREATE_OBJECT, CREATE_SYSTEM (solo COINS, CHECKPOINTS, REBIRTHS).
+SET_PROPERTIES: {type,path,properties}. DELETE_INSTANCE, MOVE_INSTANCE, DUPLICATE_INSTANCE, INSPECT_PATH, FIND_INSTANCES, INSPECT_PROJECT, INSPECT_SELECTION.
+
+UBICACIÓN
+Mundo en Workspace. GUI del jugador en StarterGui. Scripts de servidor en ServerScriptService. LocalScripts de interfaz dentro de la GUI o en StarterPlayerScripts. Remotos en ReplicatedStorage.
+
+CALIDAD
+Construcción: silueta reconocible, posiciones distintas, puerta, ventanas y techo si es una casa. No hagas una fila de cubos.
+UI: ScreenGui, un Frame centrado con AnchorPoint [0.5,0.5], Position [0.5,0,0.5,0] y Size [0,440,0,540]. Size y Position son [scaleX,offsetX,scaleY,offsetY]. Colores [r,g,b] de 0 a 255. No mezcles UIListLayout con hijos que tengan Position. Botones de al menos 40 px y separados.
+Si piden función, incluye el LocalScript y el Script de servidor que hagan falta, con rutas exactas.
+No afirmes que ya se ejecutó en Studio.
+`;
+
 const SYSTEM_INSTRUCTION = `
 Eres ABX Build, un ingeniero senior de Roblox Studio especializado en diseño 3D, UX/UI, arquitectura de software y Luau. Tu objetivo no es solo describir una solución: convierte las peticiones de crear, construir, programar, modificar o reparar en una acción concreta que el plugin pueda aplicar.
 
@@ -1350,6 +1374,21 @@ function normalizeHistory(history) {
   });
 }
 
+function chatMessageText(payload) {
+  const message = payload?.choices?.[0]?.message || {};
+  let content = '';
+  if (typeof message.content === 'string') content = message.content;
+  else if (Array.isArray(message.content)) {
+    content = message.content.map(part => typeof part === 'string' ? part : (part?.text || '')).join('');
+  }
+  content = content.replace(/<\|[^|]+?\|>/g, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  if (content) return content;
+  const reasoning = typeof message.reasoning === 'string'
+    ? message.reasoning
+    : (typeof message.reasoning_content === 'string' ? message.reasoning_content : '');
+  return reasoning.replace(/<\|[^|]+?\|>/g, '').trim();
+}
+
 function parseModelJson(output) {
   if (typeof output !== 'string' || !output.trim()) return null;
 
@@ -1458,6 +1497,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     let usedModel = model;
     let usedProvider = selectedProvider;
     let resolvedModel = null;
+    let prefetchedPayload = null;
 
     for (let i = 0; i < candidates.length; i++) {
       const candidate = candidates[i];
@@ -1507,17 +1547,32 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
           const endpoint = candidate.provider === 'groq'
             ? 'https://api.groq.com/openai/v1/chat/completions'
             : 'https://api.mistral.ai/v1/chat/completions';
+          const messages = candidate.provider === 'groq'
+            ? [
+                { role: 'system', content: GROQ_INSTRUCTION },
+                { role: 'user', content: effectiveMessage }
+              ]
+            : chatMessages;
           let lastResponse = null;
+          let lastPayload = {};
           for (const providerModel of modelIds) {
             for (const strict of [true, false]) {
-              const body = {
-                model: providerModel,
-                messages: chatMessages,
-                max_tokens: strict ? 6000 : 3500
-              };
+              const body = candidate.provider === 'groq'
+                ? {
+                    model: providerModel,
+                    messages,
+                    include_reasoning: false,
+                    reasoning_effort: 'low',
+                    max_completion_tokens: strict ? 8000 : 4000
+                  }
+                : {
+                    model: providerModel,
+                    messages,
+                    max_tokens: strict ? 6000 : 3500
+                  };
               if (strict) {
                 body.response_format = { type: 'json_object' };
-                body.temperature = 0.2;
+                if (candidate.provider !== 'groq') body.temperature = 0.2;
               }
               lastResponse = await fetch(endpoint, {
                 method: 'POST',
@@ -1528,17 +1583,24 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
                 },
                 body: JSON.stringify(body)
               });
-              if (lastResponse.ok) {
+              lastPayload = await lastResponse.json().catch(() => ({}));
+              const text = chatMessageText(lastPayload);
+              if (lastResponse.ok && text) {
                 candidateResponse = lastResponse;
+                prefetchedPayload = lastPayload;
                 resolvedModel = (candidate.provider === 'groq' ? 'groq/' : 'mistral/') + providerModel;
                 break;
               }
               const status = lastResponse.status;
-              if (![400, 404, 422].includes(status)) break;
+              if (lastResponse.ok) continue;
+              if (![400, 404, 413, 422].includes(status)) break;
             }
-            if (candidateResponse && candidateResponse.ok) break;
+            if (candidateResponse && candidateResponse.ok && prefetchedPayload) break;
           }
-          if (!candidateResponse) candidateResponse = lastResponse;
+          if (!candidateResponse) {
+            candidateResponse = lastResponse;
+            prefetchedPayload = lastPayload;
+          }
         } else {
           candidateResponse = await fetch(
             'https://generativelanguage.googleapis.com/v1beta/models/' +
@@ -1563,7 +1625,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
           );
         }
 
-        const candidatePayload = await candidateResponse.json().catch(() => ({}));
+        const candidatePayload = prefetchedPayload || await candidateResponse.json().catch(() => ({}));
         response = candidateResponse;
         payload = candidatePayload;
         usedModel = resolvedModel || candidate.model;
@@ -1608,11 +1670,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             .trim()
         : '';
     } else if (usedProvider === 'groq' || usedProvider === 'mistral') {
-      const content = payload?.choices?.[0]?.message?.content;
-      if (typeof content === 'string') output = content.trim();
-      else if (Array.isArray(content)) {
-        output = content.map(part => typeof part === 'string' ? part : (part?.text || '')).join('').trim();
-      }
+      output = chatMessageText(payload);
     } else {
       output = payload?.candidates?.[0]?.content?.parts
         ?.map(part => typeof part.text === 'string' ? part.text : '')
