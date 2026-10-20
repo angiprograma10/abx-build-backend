@@ -50,7 +50,11 @@ function validClientId(value) {
   return /^[a-zA-Z0-9_-]{16,80}$/.test(id) ? id : '';
 }
 function tokenDay() {
-  return new Date().toISOString().slice(0, 10);
+  // Reset at midnight in Mexico City, the primary audience timezone.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date());
 }
 function usageFor(clientId) {
   const day = tokenDay();
@@ -1922,6 +1926,12 @@ const cleanupTimer = setInterval(() => {
 
   for (const [key, bucket] of rateBuckets) {
     if (now >= bucket.resetAt) rateBuckets.delete(key);
+  }
+
+  // Keep only the current daily token ledger to avoid unbounded in-memory growth.
+  const todaySuffix = ':' + tokenDay();
+  for (const key of dailyTokenUsage.keys()) {
+    if (!key.endsWith(todaySuffix)) dailyTokenUsage.delete(key);
   }
 }, 5 * 60 * 1000);
 
