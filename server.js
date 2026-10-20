@@ -1638,7 +1638,8 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
               });
               lastPayload = await lastResponse.json().catch(() => ({}));
               const text = chatMessageText(lastPayload);
-              if (lastResponse.ok && text) {
+              const parsedText = parseModelJson(text);
+              if (lastResponse.ok && parsedText && typeof parsedText.reply === 'string' && Array.isArray(parsedText.actions)) {
                 candidateResponse = lastResponse;
                 prefetchedPayload = lastPayload;
                 resolvedModel = (candidate.provider === 'groq' ? 'groq/' : 'mistral/') + providerModel;
