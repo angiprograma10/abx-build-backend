@@ -40,6 +40,30 @@ const CONFIG = Object.freeze({
 
 const sessions = new Map();
 const rateBuckets = new Map();
+// MVP daily quota ledger. Before a public launch, persist this in a database:
+// Render instances can restart or scale, so in-memory quotas are not durable.
+const dailyTokenUsage = new Map();
+const DAILY_TOKEN_LIMIT = 10;
+
+function validClientId(value) {
+  const id = cleanText(value, 80);
+  return /^[a-zA-Z0-9_-]{16,80}$/.test(id) ? id : '';
+}
+function tokenDay() {
+  return new Date().toISOString().slice(0, 10);
+}
+function usageFor(clientId) {
+  const day = tokenDay();
+  const used = dailyTokenUsage.get(clientId + ':' + day) || 0;
+  return { dailyLimit: DAILY_TOKEN_LIMIT, used, remaining: Math.max(0, DAILY_TOKEN_LIMIT - used), day };
+}
+function spendDailyToken(clientId) {
+  const key = clientId + ':' + tokenDay();
+  const used = dailyTokenUsage.get(key) || 0;
+  if (used >= DAILY_TOKEN_LIMIT) return null;
+  dailyTokenUsage.set(key, used + 1);
+  return usageFor(clientId);
+}
 
 const ALLOWED_MODELS = new Set([
   'gemini-3.5-flash-lite',
@@ -97,9 +121,9 @@ CONTRATO DE SALIDA OBLIGATORIO:
 
 function taskProfile(message, buildMode) {
   const text = String(message || '');
-  const professional = /profesional|professional|top\s*global|AAA|avanzad[oa]|completo|full.game|multijugador|persisten|guardar datos|econom[ií]a|inventario|misiones|sistema[s]?|robusto|escalable|producci[oó]n|arquitectura/i.test(text);
+  const professional = /profesional|professional|top\s*global|AAA|avanzad[oa]|completo|full.game|multijugador|persisten|guardar datos|econom[ií]a|inventario|misiones|sistema[s]?|robusto|escalable|producci[oó]n|arquitectura|depur|debug|error|fall[oa]|repar|arregl|corrig|refactor|optimiza|rendimiento|accesibilidad/i.test(text);
   const game = buildMode === 'full-game' || /juego|game|obby|simulador|simulator|tycoon|rpg|rondas|niveles|mapa completo/i.test(text);
-  const build = /crea|crear|construye|construir|diseña|diseñar|genera|generar|programa|programar|implementa|implementar|arregla|arreglar|corrige|corregir|modifica|modificar|haz|hacer|build|create|design|generate|script|interfaz|ui|sistema/i.test(text);
+  const build = /crea|crear|construye|construir|diseña|diseñar|genera|generar|programa|programar|implementa|implementar|arregla|arreglar|corrige|corregir|modifica|modificar|haz|hacer|build|create|design|generate|script|interfaz|ui|sistema|depur|debug|repar|fall[oa]|error|refactor|optimiza/i.test(text);
   const connectedSystem = /conectad[oa]|funcional|interactivo|dependencias|cliente|servidor|remoteevent|remotefunction|guardar datos|persisten|inventario|econom[ií]a|misiones|recompensas|multijugador|arquitectura|seguridad|rendimiento/i.test(text);
   if (game && professional) return { tier: 'professional', maxTokens: 12000, reasoning: 'high' };
   if (game) return { tier: 'game', maxTokens: 6500, reasoning: 'medium' };
@@ -897,6 +921,12 @@ app.post('/register', rateLimit(20), (req, res) => {
   res.json({ ok: true, code });
 });
 
+app.post('/usage', rateLimit(60), (req, res) => {
+  const clientId = validClientId(req.body?.clientId);
+  if (!clientId) return res.status(400).json({ ok: false, error: 'Identificador de usuario inválido.' });
+  return res.json({ ok: true, usage: usageFor(clientId) });
+});
+
 app.post('/connect', rateLimit(30), (req, res) => {
   const code = validCode(req.body?.code);
   const session = code ? getSession(code) : null;
@@ -1030,6 +1060,14 @@ No afirmes que ya se ejecutó en Studio.
 
 const SYSTEM_INSTRUCTION = `\nARQUITECTURA EXPERTA ROBLOX — INSTRUCCIONES ADICIONALES\n- Usa un punto de entrada claro por sistema y divide responsabilidades en ModuleScripts cohesivos cuando las acciones del plugin lo permitan. SSA no significa un Script gigante con toda la lógica.\n- Aplica OOP/metatables solo cuando simplifique el mantenimiento; evita abstracciones innecesarias.\n- Limpia conexiones, eventos y tareas. Usa Maid/Janitor solo si existe; de lo contrario, implementa limpieza local sencilla y segura.\n- El servidor es autoritativo: valida en servidor tipos, rangos, estados, permisos y frecuencia de cada remoto. Nunca confíes en monedas, precios, progreso o resultados calculados por el cliente.\n- Coloca UI de jugador en StarterGui y recursos compartidos/remotos en ReplicatedStorage; mantén nombres y rutas consistentes entre scripts.\n- Usa ProfileService solo si está instalado y configurado. Con MarketplaceService, valida recibos de Developer Products mediante ProcessReceipt y verifica Game Passes en servidor. No inventes IDs.\n- Haz interfaces visualmente intencionales: jerarquía, paleta coherente, espaciado, contraste, botones legibles y feedback. Evita UI genérica o desordenada.\n- Modo experto: evalúa Knit o Flamework para proyectos grandes; ByteNet o Zap solo para networking de alto volumen; Object Pooling para objetos repetidos; FastCast para proyectiles cuando corresponda.\n- Nunca supongas que frameworks o módulos externos están instalados. No inventes APIs. Si faltan dependencias o acciones del plugin, ofrece alternativa compatible y explica qué falta.\n- Para escalar, evita conexiones y asignaciones repetidas, limita frecuencia de remotos, reutiliza objetos cuando convenga y no hagas bucles por frame innecesarios.\n- Usa defensas en capas contra exploits y registra anomalías cuando sea apropiado. No prometas seguridad absoluta ni rendimiento sin medirlo.\n- Antes de responder, revisa sintaxis probable, rutas, dependencias, conexiones entre UI y lógica, y compatibilidad con acciones admitidas. No afirmes que ejecutaste pruebas reales si no las ejecutaste.\n\nESTÁNDARES DE ARQUITECTURA ABX BUILD — TODOS LOS MODELOS\n- Usa un punto de entrada claro por sistema con ModuleScripts cohesivos cuando corresponda; no metas todo en un Script monolítico.\n- Usa OOP/metatables solo cuando ayude a mantener el código.\n- Limpia conexiones y tareas con patrón Maid/Janitor si está disponible; no supongas dependencias instaladas.\n- El servidor debe validar remotos, monedas, progreso, inventario, recompensas, compras, rangos, estados y frecuencia. El cliente solo presenta; el servidor decide.\n- Integra UI en StarterGui y recursos compartidos en ReplicatedStorage con rutas y nombres consistentes.\n- Usa ProfileService solo si existe y está configurado. Para MarketplaceService valida recibos en ProcessReceipt y verifica pases en servidor; no inventes IDs.\n- No inventes acciones/APIs ni finjas que dependencias están instaladas. Si falta una capacidad, explica el límite.\n- Diseña interfaces cuidadas con jerarquía visual, espaciado, contraste y feedback; evita UI genérica.\n- Revisa dependencias, seguridad, conexiones, rutas y errores probables. No afirmes pruebas reales no ejecutadas.\n
 Eres ABX Build, un ingeniero senior de Roblox Studio especializado en diseño 3D, UX/UI, arquitectura de software y Luau. Tu objetivo no es solo describir una solución: convierte las peticiones de crear, construir, programar, modificar o reparar en una acción concreta que el plugin pueda aplicar.
+FLUJO PROFESIONAL PARA REPARAR PROYECTOS EXISTENTES
+- Si la petición menciona un script, error, bug, UI existente, rendimiento o algo que ya está construido, NO empieces creando un reemplazo desde cero sin inspeccionar.
+- Primero usa INSPECT_SELECTION, INSPECT_PATH, FIND_INSTANCES o INSPECT_PROJECT cuando estén disponibles y sean pertinentes. Identifica la ruta y el objeto real; no inventes que viste un script si el plugin no proporcionó su contenido.
+- Distingue diagnóstico de aplicación: explica brevemente la causa probable y propone el cambio mínimo seguro. Conserva la lógica que ya funciona, nombres, rutas, conexiones y estilo existente; no borres ni reemplaces código ajeno a la reparación.
+- Para un arreglo de código, comprueba referencias, contexto servidor/cliente, tipos Luau, eventos, servicios, permisos y dependencias. Si el contenido del script no está disponible para inspección, solicita el contenido o usa las acciones de lectura que realmente existan; nunca finjas haber leído el código.
+- Para una UI solicitada, aclara el propósito funcional implícito y conecta botones, estado y feedback. Si se trata de una UI existente, modifica esa interfaz en vez de duplicarla, salvo que el usuario pida una nueva.
+- Optimiza latencia: una petición sencilla debe recibir una respuesta concisa y el mínimo de acciones necesarias. Reserva planes grandes y revisión extra para cambios complejos. No sacrifiques validación JSON ni seguridad para parecer más rápido.
+- El resultado debe seguir exactamente el contrato JSON definido abajo. No incluyas markdown, bloques de código ni texto antes o después del JSON.
 
 SENTIDO COMÚN DE DESARROLLADOR — REQUISITOS IMPLÍCITOS DEL JUEGO
 Interpreta una petición como un objetivo jugable completo, no como una lista literal de objetos. El usuario no tiene que enumerar cada componente obvio. Si pide una mecánica, infiere los elementos necesarios para que un jugador pueda usarla.
@@ -1482,6 +1520,20 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     });
   }
 
+  const clientId = validClientId(req.body?.clientId);
+  if (!clientId) {
+    return res.status(400).json({ ok: false, error: 'No pude identificar esta sesión del sitio. Recarga la página e inténtalo de nuevo.' });
+  }
+  const tokenState = usageFor(clientId);
+  if (tokenState.remaining <= 0) {
+    return res.status(429).json({
+      ok: false,
+      code: 'DAILY_TOKENS_EXHAUSTED',
+      error: 'Ya utilizaste tus 10 tokens de hoy. Vuelve mañana para recibir otros 10.',
+      usage: tokenState
+    });
+  }
+
   const message = cleanText(req.body?.message, CONFIG.maxMessageLength);
   const buildMode = req.body?.buildMode === 'full-game' ? 'full-game' : 'standard';
   if (!message) {
@@ -1820,13 +1872,24 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
           ' acciones en orden; al confirmar la primera acción, el plugin encolará el plan completo.', 3500)
       : reply;
 
+    const usage = spendDailyToken(clientId);
+    if (!usage) {
+      return res.status(429).json({
+        ok: false,
+        code: 'DAILY_TOKENS_EXHAUSTED',
+        error: 'Tus 10 tokens diarios ya se utilizaron en otra solicitud. Vuelve mañana.',
+        usage: usageFor(clientId)
+      });
+    }
+
     return res.json({
       ok: true,
       reply: responseReply,
       action,
       planCount: actions.length,
       modelUsed: usedModel,
-      providerUsed: usedProvider
+      providerUsed: usedProvider,
+      usage
     });
   } catch (error) {
     if (error.name === 'AbortError') {
