@@ -1341,7 +1341,7 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
           instructions: SYSTEM_INSTRUCTION + '\\n\\n' + CONSTRUCTION_REVIEW_INSTRUCTION,
           input,
           text: { format: { type: 'json_object' } },
-          max_output_tokens: task.maxTokens
+          max_output_tokens: CONFIG.maxOutputTokens
         })
       });
       payload = await response.json().catch(() => ({}));
