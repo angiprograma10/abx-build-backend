@@ -97,10 +97,14 @@ CONTRATO DE SALIDA OBLIGATORIO:
 
 function taskProfile(message, buildMode) {
   const text = String(message || '');
-  const professional = /profesional|professional|top\s*global|AAA|avanzad[oa]|completo|full.game|multijugador|persisten|guardar datos|econom[ií]a|inventario|misiones|sistema[s]?/i.test(text);
+  const professional = /profesional|professional|top\s*global|AAA|avanzad[oa]|completo|full.game|multijugador|persisten|guardar datos|econom[ií]a|inventario|misiones|sistema[s]?|robusto|escalable|producci[oó]n|arquitectura/i.test(text);
   const game = buildMode === 'full-game' || /juego|game|obby|simulador|simulator|tycoon|rpg|rondas|niveles|mapa completo/i.test(text);
-  if (professional && game) return { tier: 'professional', maxTokens: 12000, reasoning: 'high' };
+  const build = /crea|crear|construye|construir|diseña|diseñar|genera|generar|programa|programar|implementa|implementar|arregla|arreglar|corrige|corregir|modifica|modificar|haz|hacer|build|create|design|generate|script|interfaz|ui|sistema/i.test(text);
+  const connectedSystem = /conectad[oa]|funcional|interactivo|dependencias|cliente|servidor|remoteevent|remotefunction|guardar datos|persisten|inventario|econom[ií]a|misiones|recompensas|multijugador|arquitectura|seguridad|rendimiento/i.test(text);
+  if (game && professional) return { tier: 'professional', maxTokens: 12000, reasoning: 'high' };
   if (game) return { tier: 'game', maxTokens: 6500, reasoning: 'medium' };
+  if (professional || (build && connectedSystem)) return { tier: 'professional-system', maxTokens: 6500, reasoning: 'high' };
+  if (build) return { tier: 'construction', maxTokens: 3500, reasoning: 'medium' };
   return { tier: 'simple', maxTokens: 2200, reasoning: 'low' };
 }
 
@@ -1597,7 +1601,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             : 'https://api.mistral.ai/v1/chat/completions';
           const messages = candidate.provider === 'groq'
             ? [
-                { role: 'system', content: GROQ_INSTRUCTION + '\n\n' + modelTierInstruction(model) },
+                { role: 'system', content: SYSTEM_INSTRUCTION + '\\n\\n' + JSON_CONTRACT_INSTRUCTION + '\\n\\n' + GROQ_INSTRUCTION + '\\n\\n' + modelTierInstruction(model) + '\\n\\nPERFIL DE TAREA: ' + task.tier + '. Revisa internamente los requisitos, dependencias y resultados visibles antes de devolver el JSON. Ajusta el tamaño de la solución al presupuesto disponible sin dejar incompleta la función principal.' },
                 ...history.map(item => ({ role: item.role === 'model' ? 'assistant' : 'user', content: item.parts.map(part => part.text || '').join('') })),
                 { role: 'user', content: effectiveMessage }
               ]
