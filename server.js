@@ -1610,18 +1610,23 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
           let lastPayload = {};
           for (const providerModel of modelIds) {
             for (const strict of [true, false]) {
+              const retryMessages = strict ? messages : [
+                ...messages,
+                { role: 'assistant', content: chatMessageText(lastPayload) || '' },
+                { role: 'user', content: 'Corrige la respuesta anterior. Devuelve SOLO JSON válido con reply como string y actions como array. Sin Markdown ni texto fuera del JSON. Usa únicamente acciones y propiedades admitidas por ABX Build.' }
+              ];
               const body = candidate.provider === 'groq'
                 ? {
                     model: providerModel,
-                    messages,
+                    messages: retryMessages,
                     include_reasoning: false,
                     reasoning_effort: task.reasoning,
                     max_completion_tokens: strict ? task.maxTokens : Math.max(1800, Math.floor(task.maxTokens * 0.7))
                   }
                 : {
                     model: providerModel,
-                    messages,
-                    max_tokens: strict ? task.maxTokens : Math.max(1800, Math.floor(task.maxTokens * 0.7))
+                    messages: retryMessages,
+                    max_tokens: strict ? task.maxTokens : Math.min(2200, Math.max(900, task.maxTokens))
                   };
               if (strict) {
                 body.response_format = { type: 'json_object' };
