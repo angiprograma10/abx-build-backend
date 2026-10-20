@@ -57,6 +57,32 @@ function providerForModel(model) {
   if (ALLOWED_MISTRAL_MODELS.has(model)) return 'mistral';
   return 'gemini';
 }
+const MODEL_TIER_INSTRUCTIONS = Object.freeze({
+  'gemini-3.5-flash-lite': `
+NIVEL 1 — VELOCIDAD Y PRECISIÓN PRÁCTICA
+Resuelve rápido y directamente. Para cambios pequeños, usa el mínimo de acciones necesarias sin sacrificar funcionalidad. Identifica ambigüedades importantes; si puedes tomar una decisión razonable y reversible, tómala. Comprueba nombres, rutas, tipos y dependencias. No agregues sistemas que no se pidieron.
+`,
+  'gemini-3.5-flash': `
+NIVEL 2 — DESARROLLADOR ROBLOX EQUILIBRADO
+Además del nivel 1, interpreta el objetivo completo y anticipa dependencias. Para cada función conecta entrada, lógica, estado y resultado visible. Diseña UI adaptable, con jerarquía visual, restricciones de tamaño y feedback. En scripts, cubre inicialización, estados vacíos, errores y limpieza de eventos. Mantén soluciones simples y rápidas.
+`,
+  'gemini-3-flash-preview': `
+NIVEL 3 — CONSTRUCTOR Y PROGRAMADOR AVANZADO
+Además de los niveles 1 y 2, planea el orden de construcción antes de emitir acciones. Divide sistemas en servidor/cliente/módulos según corresponda; crea primero carpetas, valores y remotos requeridos. Para juegos, entrega un ciclo jugable conectado (inicio, acción principal, recompensa, UI y reinicio). Revisa mentalmente el contrato de cada acción y los enlaces entre scripts. Prioriza resultados completos, no solo objetos decorativos.
+`,
+  'mistral/ministral-14b-2512': `
+NIVEL 4 — ARQUITECTO EXPERTO
+Además de los niveles anteriores, evalúa mantenibilidad, seguridad, rendimiento y crecimiento del proyecto. Usa módulos cohesivos y patrones OOP solo cuando aporten valor. Valida en servidor todas las operaciones sensibles y limita frecuencia de remotos. Diseña interfaces consistentes y pulidas. No dependas de frameworks o assets que no estén disponibles; si una capacidad falta en el esquema, elige la alternativa compatible más cercana y dilo con claridad.
+`,
+  'groq/openai/gpt-oss-120b': `
+NIVEL 5 — INGENIERO PRINCIPAL ABX BUILD
+Aplica todos los niveles anteriores con una auditoría final rigurosa. Descompón la petición en requisitos verificables; asigna cada requisito a acciones concretas y comprueba que no haya referencias rotas, scripts sin dependencias, UI sin lógica o lógica sin feedback. Prefiere la solución más completa que quepa en el contrato permitido, pero evita complejidad superflua. Considera exploits, concurrencia, persistencia, recuperación de errores y coste de ejecución cuando sean relevantes. No inventes APIs, IDs, pruebas ni dependencias. Si la solicitud es grande, entrega un MVP jugable coherente y declara lo pendiente.
+`
+});
+function modelTierInstruction(model) {
+  return MODEL_TIER_INSTRUCTIONS[model] || MODEL_TIER_INSTRUCTIONS['gemini-3.5-flash-lite'];
+}
+
 function apiKeyForProvider(provider) {
   return provider === 'openai' ? OPENAI_API_KEY
     : provider === 'deepseek' ? DEEPSEEK_API_KEY
@@ -1450,6 +1476,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     : (ALLOWED_MODELS.has(envModel) ? envModel
       : 'gemini-3.5-flash-lite');
   const selectedProvider = providerForModel(model);
+  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + modelTierInstruction(model);
 
   // Respect the selected provider: missing credentials are a clear configuration
   // error, rather than silently running a different provider than the user chose.
@@ -1523,7 +1550,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             },
             body: JSON.stringify({
               model: candidate.model,
-              instructions: SYSTEM_INSTRUCTION,
+              instructions: effectiveSystemInstruction,
               input: openAIInput,
               text: { format: { type: 'json_object' } },
               max_output_tokens: CONFIG.maxOutputTokens
@@ -1531,7 +1558,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
           });
         } else if (candidate.provider === 'groq' || candidate.provider === 'mistral') {
           const chatMessages = [
-            { role: 'system', content: SYSTEM_INSTRUCTION },
+            { role: 'system', content: effectiveSystemInstruction },
             ...history.map(item => ({
               role: item.role === 'model' ? 'assistant' : 'user',
               content: item.parts.map(part => part.text || '').join('')
@@ -1548,7 +1575,8 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             : 'https://api.mistral.ai/v1/chat/completions';
           const messages = candidate.provider === 'groq'
             ? [
-                { role: 'system', content: GROQ_INSTRUCTION },
+                { role: 'system', content: GROQ_INSTRUCTION + '\n\n' + modelTierInstruction(model) },
+                ...history.map(item => ({ role: item.role === 'model' ? 'assistant' : 'user', content: item.parts.map(part => part.text || '').join('') })),
                 { role: 'user', content: effectiveMessage }
               ]
             : chatMessages;
@@ -1612,7 +1640,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
                 'x-goog-api-key': GEMINI_API_KEY
               },
               body: JSON.stringify({
-                systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+                systemInstruction: { parts: [{ text: effectiveSystemInstruction }] },
                 contents,
                 generationConfig: {
                   responseMimeType: 'application/json',
