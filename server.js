@@ -83,6 +83,27 @@ function modelTierInstruction(model) {
   return MODEL_TIER_INSTRUCTIONS[model] || MODEL_TIER_INSTRUCTIONS['gemini-3.5-flash-lite'];
 }
 
+const JSON_CONTRACT_INSTRUCTION = `
+CONTRATO DE SALIDA OBLIGATORIO:
+- Devuelve SOLO un objeto JSON válido, sin Markdown, sin bloques de código y sin texto fuera del JSON.
+- La forma exacta es {"reply":"mensaje breve en español","actions":[]} o {"reply":"resumen","actions":[{"type":"TIPO_ADMITIDO", "...":"..."}]}.
+- La propiedad actions siempre debe existir y ser un array. Nunca uses "action" singular como propiedad de salida.
+- Usa únicamente tipos de acción y propiedades admitidos por el esquema ABX Build. No inventes acciones, propiedades, rutas de API ni dependencias.
+- Escapa comillas y saltos de línea correctamente dentro de strings JSON.
+- Para preguntas sin cambios, responde con actions vacío. Para construcciones, ordena acciones para que las dependencias existan antes de los scripts que las necesitan.
+- No sacrifiques la funcionalidad principal por decoración. Para tareas simples, entrega una solución compacta. Para juegos completos, conecta escenario, ciclo jugable, UI, lógica y reinicio según el alcance solicitado.
+- Nunca afirmes que una acción se ejecutó o probó en Roblox Studio si no hay confirmación real.
+`;
+
+function taskProfile(message, buildMode) {
+  const text = String(message || '');
+  const professional = /profesional|professional|top\s*global|AAA|avanzad[oa]|completo|full.game|multijugador|persisten|guardar datos|econom[ií]a|inventario|misiones|sistema[s]?/i.test(text);
+  const game = buildMode === 'full-game' || /juego|game|obby|simulador|simulator|tycoon|rpg|rondas|niveles|mapa completo/i.test(text);
+  if (professional && game) return { tier: 'professional', maxTokens: 12000, reasoning: 'high' };
+  if (game) return { tier: 'game', maxTokens: 6500, reasoning: 'medium' };
+  return { tier: 'simple', maxTokens: 2200, reasoning: 'low' };
+}
+
 function apiKeyForProvider(provider) {
   return provider === 'openai' ? OPENAI_API_KEY
     : provider === 'deepseek' ? DEEPSEEK_API_KEY
@@ -1320,7 +1341,7 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
           instructions: SYSTEM_INSTRUCTION + '\\n\\n' + CONSTRUCTION_REVIEW_INSTRUCTION,
           input,
           text: { format: { type: 'json_object' } },
-          max_output_tokens: CONFIG.maxOutputTokens
+          max_output_tokens: task.maxTokens
         })
       });
       payload = await response.json().catch(() => ({}));
@@ -1476,7 +1497,8 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     : (ALLOWED_MODELS.has(envModel) ? envModel
       : 'gemini-3.5-flash-lite');
   const selectedProvider = providerForModel(model);
-  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + modelTierInstruction(model);
+  const task = taskProfile(message, buildMode);
+  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\nPERFIL DE TAREA: ' + task.tier + '. Ajusta el alcance a este perfil y devuelve JSON inmediatamente cuando la tarea sea sencilla.';
 
   // Respect the selected provider: missing credentials are a clear configuration
   // error, rather than silently running a different provider than the user chose.
@@ -1589,13 +1611,13 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
                     model: providerModel,
                     messages,
                     include_reasoning: false,
-                    reasoning_effort: 'low',
-                    max_completion_tokens: strict ? 8000 : 4000
+                    reasoning_effort: task.reasoning,
+                    max_completion_tokens: strict ? task.maxTokens : Math.max(1800, Math.floor(task.maxTokens * 0.7))
                   }
                 : {
                     model: providerModel,
                     messages,
-                    max_tokens: strict ? 6000 : 3500
+                    max_tokens: strict ? task.maxTokens : Math.max(1800, Math.floor(task.maxTokens * 0.7))
                   };
               if (strict) {
                 body.response_format = { type: 'json_object' };
@@ -1645,7 +1667,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
                 generationConfig: {
                   responseMimeType: 'application/json',
                   temperature: 0.15,
-                  maxOutputTokens: CONFIG.maxOutputTokens
+                  maxOutputTokens: task.maxTokens
                 }
               })
             }
