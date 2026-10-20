@@ -1601,7 +1601,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             : 'https://api.mistral.ai/v1/chat/completions';
           const messages = candidate.provider === 'groq'
             ? [
-                { role: 'system', content: SYSTEM_INSTRUCTION + '\\n\\n' + JSON_CONTRACT_INSTRUCTION + '\\n\\n' + GROQ_INSTRUCTION + '\\n\\n' + modelTierInstruction(model) + '\\n\\nPERFIL DE TAREA: ' + task.tier + '. Revisa internamente los requisitos, dependencias y resultados visibles antes de devolver el JSON. Ajusta el tamaño de la solución al presupuesto disponible sin dejar incompleta la función principal.' },
+                { role: 'system', content: SYSTEM_INSTRUCTION + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + GROQ_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\nPERFIL DE TAREA: ' + task.tier + '. Revisa internamente los requisitos, dependencias y resultados visibles antes de devolver el JSON. Ajusta el tamaño de la solución al presupuesto disponible sin dejar incompleta la función principal.' },
                 ...history.map(item => ({ role: item.role === 'model' ? 'assistant' : 'user', content: item.parts.map(part => part.text || '').join('') })),
                 { role: 'user', content: effectiveMessage }
               ]
