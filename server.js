@@ -40,6 +40,30 @@ const CONFIG = Object.freeze({
 
 const sessions = new Map();
 const rateBuckets = new Map();
+// MVP ledger: keyed by an opaque browser ID and UTC day. Move to durable DB
+// before public launch so quotas survive Render restarts and scale across instances.
+const dailyTokenUsage = new Map();
+const DAILY_TOKEN_LIMIT = 10;
+
+function validClientId(value) {
+  const id = cleanText(value, 80);
+  return /^[a-zA-Z0-9_-]{16,80}$/.test(id) ? id : '';
+}
+function tokenDay() {
+  return new Date().toISOString().slice(0, 10);
+}
+function usageFor(clientId) {
+  const key = clientId + ':' + tokenDay();
+  const used = dailyTokenUsage.get(key) || 0;
+  return { dailyLimit: DAILY_TOKEN_LIMIT, used, remaining: Math.max(0, DAILY_TOKEN_LIMIT - used), day: tokenDay() };
+}
+function spendDailyToken(clientId) {
+  const key = clientId + ':' + tokenDay();
+  const used = dailyTokenUsage.get(key) || 0;
+  if (used >= DAILY_TOKEN_LIMIT) return null;
+  dailyTokenUsage.set(key, used + 1);
+  return usageFor(clientId);
+}
 
 const ALLOWED_MODELS = new Set([
   'gemini-3.5-flash-lite',
@@ -897,6 +921,12 @@ app.post('/register', rateLimit(20), (req, res) => {
   res.json({ ok: true, code });
 });
 
+app.post('/usage', rateLimit(60), (req, res) => {
+  const clientId = validClientId(req.body?.clientId);
+  if (!clientId) return res.status(400).json({ ok: false, error: 'Identificador de usuario inválido.' });
+  return res.json({ ok: true, usage: usageFor(clientId) });
+});
+
 app.post('/connect', rateLimit(30), (req, res) => {
   const code = validCode(req.body?.code);
   const session = code ? getSession(code) : null;
@@ -1482,6 +1512,20 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     });
   }
 
+  const clientId = validClientId(req.body?.clientId);
+  if (!clientId) {
+    return res.status(400).json({ ok: false, error: 'No pude identificar esta sesión del sitio. Recarga la página e inténtalo de nuevo.' });
+  }
+  const tokenState = usageFor(clientId);
+  if (tokenState.remaining <= 0) {
+    return res.status(429).json({
+      ok: false,
+      code: 'DAILY_TOKENS_EXHAUSTED',
+      error: 'Ya utilizaste tus 10 tokens de hoy. Vuelve mañana para recibir otros 10.',
+      usage: tokenState
+    });
+  }
+
   const message = cleanText(req.body?.message, CONFIG.maxMessageLength);
   const buildMode = req.body?.buildMode === 'full-game' ? 'full-game' : 'standard';
   if (!message) {
@@ -1820,13 +1864,24 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
           ' acciones en orden; al confirmar la primera acción, el plugin encolará el plan completo.', 3500)
       : reply;
 
+    const usage = spendDailyToken(clientId);
+    if (!usage) {
+      return res.status(429).json({
+        ok: false,
+        code: 'DAILY_TOKENS_EXHAUSTED',
+        error: 'Tus 10 tokens diarios ya se utilizaron en otra solicitud. Vuelve mañana.',
+        usage: usageFor(clientId)
+      });
+    }
+
     return res.json({
       ok: true,
       reply: responseReply,
       action,
       planCount: actions.length,
       modelUsed: usedModel,
-      providerUsed: usedProvider
+      providerUsed: usedProvider,
+      usage
     });
   } catch (error) {
     if (error.name === 'AbortError') {
