@@ -145,6 +145,8 @@ CONTRATO DE SALIDA OBLIGATORIO:
 - Nunca afirmes que una acción se ejecutó o probó en Roblox Studio si no hay confirmación real.
 `;
 
+const QUALITY_ENGINE_INSTRUCTION = "ABX QUALITY ENGINE — APLICA A LOS CINCO MODELOS\n\n1. PLANIFICA: convierte la solicitud en requisitos observables; ordena acciones por dependencias y usa nombres/rutas consistentes. Si se trata de reparar algo existente, inspecciona primero con las acciones de inspección disponibles; nunca finjas haber visto contenido que no recibiste. Conserva lo que funciona y evita duplicados.\n\n2. CONSTRUCCIÓN 3D: usa posiciones XYZ, tamaños XYZ, rotaciones, formas, materiales y colores deliberados. Define escala, origen, base, profundidad, altura, apoyos, accesos y superficies de contacto. Edificios/casas deben tener volumen y fachadas; puertas y ventanas no deben quedar tapadas por paredes; techos deben estar elevados; torres deben tener niveles diferenciados; mapas deben tener rutas transitables y spawn seguro. No uses hileras de cubos como sustituto de una forma reconocible. Evita piezas superpuestas, flotantes o duplicadas. Distribuye geometría en los tres ejes cuando corresponda.\n\n3. UI: crea una composición intencional con jerarquía, paleta coherente, contraste, espaciado y nombres estables. Planifica ScreenGui, contenedor raíz, secciones, labels, botones y estados. No mezcles layouts automáticos con posicionamiento manual de los mismos hijos. Haz tamaños y anclajes adaptables cuando el esquema lo permita. Cada botón debe realizar una acción real o aclararse que es visual; conecta estado, evento y feedback. No inventes asset IDs ni propiedades no admitidas por el plugin.\n\n4. LUAU: código válido y mantenible, contexto correcto de servidor/cliente, rutas y dependencias reales, inicialización segura, limpieza de eventos y manejo de nil/errores. El servidor valida remotos y decide monedas, recompensas, compras y progreso; el cliente no es autoridad. Conecta entrada → validación → cambio de estado → resultado visible. No crees remotos sin consumidores ni scripts que esperen objetos inexistentes. No inventes APIs, IDs, frameworks o persistencia no configurados.\n\n5. AUDITORÍA: antes del JSON compara cada requisito con acciones concretas, revisa geometría, UI, rutas, dependencias y duplicados. No afirmes pruebas reales ni capacidades no disponibles. Si el plugin no admite una función, explica el límite y ofrece la alternativa compatible. Para tareas grandes, prioriza un MVP coherente y di qué queda pendiente. Devuelve solo JSON válido con reply y actions; nunca Markdown fuera del JSON.";
+
 function taskProfile(message, buildMode) {
   const text = String(message || '');
   const professional = /profesional|professional|top\s*global|AAA|avanzad[oa]|completo|full.game|multijugador|persisten|guardar datos|econom[ií]a|inventario|misiones|sistema[s]?|robusto|escalable|producci[oó]n|arquitectura|depur|debug|error|fall[oa]|repar|arregl|corrig|refactor|optimiza|rendimiento|accesibilidad/i.test(text);
@@ -1416,7 +1418,7 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
         },
         body: JSON.stringify({
           model,
-          instructions: SYSTEM_INSTRUCTION + '\\n\\n' + CONSTRUCTION_REVIEW_INSTRUCTION,
+          instructions: SYSTEM_INSTRUCTION + '\\n\\n' + QUALITY_ENGINE_INSTRUCTION + '\\n\\n' + CONSTRUCTION_REVIEW_INSTRUCTION,
           input,
           text: { format: { type: 'json_object' } },
           max_output_tokens: CONFIG.maxOutputTokens
@@ -1453,7 +1455,7 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
           'x-goog-api-key': apiKey
         },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION + '\\n\\n' + CONSTRUCTION_REVIEW_INSTRUCTION }] },
+          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION + '\\n\\n' + QUALITY_ENGINE_INSTRUCTION + '\\n\\n' + CONSTRUCTION_REVIEW_INSTRUCTION }] },
           contents: [{ role: 'user', parts: [{ text: reviewMessage }] }],
           generationConfig: {
             responseMimeType: 'application/json',
@@ -1617,7 +1619,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     });
   }
   const task = taskProfile(message, buildMode);
-  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\nPERFIL DE TAREA: ' + task.tier + '. Ajusta el alcance a este perfil y devuelve JSON inmediatamente cuando la tarea sea sencilla.';
+  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\nPERFIL DE TAREA: ' + task.tier + '. Ajusta el alcance a este perfil y devuelve JSON inmediatamente cuando la tarea sea sencilla.';
 
   // Respect the selected provider: missing credentials are a clear configuration
   // error, rather than silently running a different provider than the user chose.
