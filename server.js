@@ -111,10 +111,7 @@ Interpreta el objetivo completo y anticipa dependencias. Para cada función cone
 `,
 
 
-  'gemini-3.5-flash-lite': `
-NIVEL 1 — VELOCIDAD Y PRECISIÓN PRÁCTICA
-Resuelve rápido y directamente. Para cambios pequeños, usa el mínimo de acciones necesarias sin sacrificar funcionalidad. Identifica ambigüedades importantes; si puedes tomar una decisión razonable y reversible, tómala. Comprueba nombres, rutas, tipos y dependencias. No agregues sistemas que no se pidieron.
-`,
+
   'gemini-3.5-flash': `
 NIVEL 2 — DESARROLLADOR ROBLOX EQUILIBRADO
 Además del nivel 1, interpreta el objetivo completo y anticipa dependencias. Para cada función conecta entrada, lógica, estado y resultado visible. Diseña UI adaptable, con jerarquía visual, restricciones de tamaño y feedback. En scripts, cubre inicialización, estados vacíos, errores y limpieza de eventos. Mantén soluciones simples y rápidas.
