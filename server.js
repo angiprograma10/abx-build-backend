@@ -109,14 +109,8 @@ Resuelve rápido y directamente. Para cambios pequeños, usa el mínimo de accio
 NIVEL 2 — DESARROLLADOR PRÁCTICO ABX BUILD
 Interpreta el objetivo completo y anticipa dependencias. Para cada función conecta entrada, lógica, estado y resultado visible. Diseña UI adaptable, con jerarquía visual, restricciones de tamaño y feedback. En scripts, cubre inicialización, estados vacíos, errores y limpieza de eventos.
 `,
-  'gemini-3.8-flash': `
-NIVEL 4 — CONSTRUCTOR PRINCIPAL ABX BUILD
-Trata la petición como un resultado de Studio, no como una lista de nombres. Antes del JSON, organiza mentalmente objetivo y criterios de aceptación, jerarquía espacial/visual, dependencias, orden de acciones, conexiones funcionales y revisión final. En construcciones 3D define origen, escala, orientación, separación y puntos de unión; apoya edificios en el suelo, alinea paredes y techos, deja rutas transitables y evita piezas flotantes o duplicadas. En UI define propósito, jerarquía, layout, anclajes, tamaños, colores, estados, acciones de botones y feedback; no uses posiciones aleatorias ni mezcles UIListLayout con hijos posicionados manualmente. En scripts comprueba contexto servidor/cliente, rutas, eventos, validación, ciclo de vida y limpieza. Prioriza que todo quede conectado y bien montado, no solo que existan los objetos.
-`,
-  'gemini-3.1-pro-preview': `
-NIVEL 5 — ARQUITECTO DE PROYECTOS COMPLEJOS
-Planifica soluciones grandes por fases y dependencias. Comprueba que nombres, rutas, RemoteEvent, Value, ModuleScript, Script, LocalScript y elementos UI coincidan exactamente entre acciones. Usa arquitectura cliente-servidor segura, scripts con responsabilidades claras y UI coherente. Para construcciones crea primero base, luego soportes/paredes, techo, accesos y detalles; valida escala, alineación, uniones, colisiones y espacio jugable. Para UI crea contenedor/layout antes de hijos, establece propiedades explícitas y conecta botones a lógica real. Audita requisito por requisito y corrige acciones incompletas o contradictorias. No inventes capacidades del plugin ni afirmes pruebas no ejecutadas.
-`,
+
+
   'gemini-3.5-flash-lite': `
 NIVEL 1 — VELOCIDAD Y PRECISIÓN PRÁCTICA
 Resuelve rápido y directamente. Para cambios pequeños, usa el mínimo de acciones necesarias sin sacrificar funcionalidad. Identifica ambigüedades importantes; si puedes tomar una decisión razonable y reversible, tómala. Comprueba nombres, rutas, tipos y dependencias. No agregues sistemas que no se pidieron.
@@ -1596,14 +1590,6 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     return res.status(400).json({ ok: false, error: 'No pude identificar esta sesión del sitio. Recarga la página e inténtalo de nuevo.' });
   }
   const tokenState = usageFor(clientId);
-  if (tokenState.remaining <= 0) {
-    return res.status(429).json({
-      ok: false,
-      code: 'DAILY_TOKENS_EXHAUSTED',
-      error: 'Ya utilizaste tus 10 tokens de hoy. Vuelve mañana para recibir otros 10.',
-      usage: tokenState
-    });
-  }
 
   const message = cleanText(req.body?.message, CONFIG.maxMessageLength);
   const buildMode = req.body?.buildMode === 'full-game' ? 'full-game' : 'standard';
@@ -1624,6 +1610,15 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     : (ALLOWED_MODELS.has(envModel) ? envModel
       : 'gemini-3.5-flash-lite');
   const selectedProvider = providerForModel(model);
+  const requestedTokenCost = ({ 'gemini-3.8-flash': 2, 'gemini-4-argon': 3 })[model] || 0;
+  if (tokenState.remaining < requestedTokenCost) {
+    return res.status(429).json({
+      ok: false,
+      code: 'DAILY_TOKENS_EXHAUSTED',
+      error: 'No tienes suficientes tokens premium para ese modelo. Elige un modelo gratis o vuelve mañana.',
+      usage: tokenState
+    });
+  }
   const task = taskProfile(message, buildMode);
   const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\nPERFIL DE TAREA: ' + task.tier + '. Ajusta el alcance a este perfil y devuelve JSON inmediatamente cuando la tarea sea sencilla.';
 
