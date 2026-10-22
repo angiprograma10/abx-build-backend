@@ -867,7 +867,7 @@ app.get('/', (_req, res) => {
   res.json({
     ok: true,
     service: 'ABX Build Backend',
-    version: '2.8.0',
+    version: '3.0.0-beta.1',
     aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY || DEEPSEEK_API_KEY || GROQ_API_KEY || MISTRAL_API_KEY),
     providers: {
       gemini: Boolean(GEMINI_API_KEY),
@@ -879,7 +879,8 @@ app.get('/', (_req, res) => {
     features: [
       'session-queue', 'action-validation',
       'roblox-create-edit-inspect', 'gemini-chat', 'openai-responses',
-      'deepseek-responses', 'groq-chat-completions', 'mistral-chat-completions'
+      'deepseek-responses', 'groq-chat-completions', 'mistral-chat-completions',
+      'daily-token-quota', 'provider-availability', 'robust-json-extraction'
     ]
   });
 });
