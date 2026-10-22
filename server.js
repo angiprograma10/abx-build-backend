@@ -14,7 +14,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || '';
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4-mini';
 
 const CONFIG = Object.freeze({
@@ -71,13 +71,15 @@ function spendDailyToken(clientId) {
 
 const ALLOWED_MODELS = new Set([
   'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-3.1-pro-preview',
   'gemini-3.5-flash',
   'gemini-3-flash-preview'
 ]);
 const ALLOWED_OPENAI_MODELS = new Set();
 const ALLOWED_DEEPSEEK_MODELS = new Set();
-const ALLOWED_GROQ_MODELS = new Set(['groq/openai/gpt-oss-120b']);
-const ALLOWED_MISTRAL_MODELS = new Set(['mistral/ministral-14b-2512']);
+const ALLOWED_GROQ_MODELS = new Set();
+const ALLOWED_MISTRAL_MODELS = new Set();
 function providerForModel(model) {
   if (ALLOWED_OPENAI_MODELS.has(model)) return 'openai';
   if (ALLOWED_DEEPSEEK_MODELS.has(model)) return 'deepseek';
@@ -86,6 +88,14 @@ function providerForModel(model) {
   return 'gemini';
 }
 const MODEL_TIER_INSTRUCTIONS = Object.freeze({
+  'gemini-3.8-flash': `
+NIVEL 4 — CONSTRUCTOR PRINCIPAL ABX BUILD
+Trata la petición como un resultado de Studio, no como una lista de nombres. Antes del JSON, organiza mentalmente objetivo y criterios de aceptación, jerarquía espacial/visual, dependencias, orden de acciones, conexiones funcionales y revisión final. En construcciones 3D define origen, escala, orientación, separación y puntos de unión; apoya edificios en el suelo, alinea paredes y techos, deja rutas transitables y evita piezas flotantes o duplicadas. En UI define propósito, jerarquía, layout, anclajes, tamaños, colores, estados, acciones de botones y feedback; no uses posiciones aleatorias ni mezcles UIListLayout con hijos posicionados manualmente. En scripts comprueba contexto servidor/cliente, rutas, eventos, validación, ciclo de vida y limpieza. Prioriza que todo quede conectado y bien montado, no solo que existan los objetos.
+`,
+  'gemini-3.1-pro-preview': `
+NIVEL 5 — ARQUITECTO DE PROYECTOS COMPLEJOS
+Planifica soluciones grandes por fases y dependencias. Comprueba que nombres, rutas, RemoteEvent, Value, ModuleScript, Script, LocalScript y elementos UI coincidan exactamente entre acciones. Usa arquitectura cliente-servidor segura, scripts con responsabilidades claras y UI coherente. Para construcciones crea primero base, luego soportes/paredes, techo, accesos y detalles; valida escala, alineación, uniones, colisiones y espacio jugable. Para UI crea contenedor/layout antes de hijos, establece propiedades explícitas y conecta botones a lógica real. Audita requisito por requisito y corrige acciones incompletas o contradictorias. No inventes capacidades del plugin ni afirmes pruebas no ejecutadas.
+`,
   'gemini-3.5-flash-lite': `
 NIVEL 1 — VELOCIDAD Y PRECISIÓN PRÁCTICA
 Resuelve rápido y directamente. Para cambios pequeños, usa el mínimo de acciones necesarias sin sacrificar funcionalidad. Identifica ambigüedades importantes; si puedes tomar una decisión razonable y reversible, tómala. Comprueba nombres, rutas, tipos y dependencias. No agregues sistemas que no se pidieron.
@@ -1089,6 +1099,15 @@ COMPLETITUD IMPLÍCITA
 - Antes de responder, verifica internamente cada criterio de aceptación. Si falta una UI evidente, color/material, conexión de script o condición básica de jugabilidad, corrige el plan.
 - Usa solo tipos de acción, propiedades, clases y APIs que el plugin realmente soporte. Si una capacidad no existe, no inventes una acción: usa la mejor alternativa compatible e indica el límite.
 - No sobreconstruyas con monetización, DataStores, tiendas, leaderboards o sistemas no solicitados ni necesarios para el bucle central.
+REGLAS DE MONTAJE Y COMPOSICIÓN ABX
+- Piensa como constructor de Studio: no basta con emitir piezas sueltas. Cada estructura necesita plano espacial coherente, base, piezas alineadas, medidas compatibles y una razón para cada elemento.
+- Usa coordenadas y dimensiones compatibles: paredes sobre la base, techo sobre paredes, puertas/ventanas dentro de huecos, escaleras con pasos alcanzables. Evita intersecciones accidentales, piezas suspendidas, objetos ocultos dentro de otros y detalles que bloqueen recorridos.
+- Divide mapas en zonas con rutas claras. Pon el spawn sobre suelo seguro y evita ubicar el contenido principal fuera del alcance.
+- En UI, crea sistema visual consistente: panel raíz, márgenes uniformes, tipografía legible, contraste y botones conectados a resultados reales. No crees solo un fondo con texto; arma jerarquía y distribución. Si el esquema no soporta layouts avanzados, usa tamaños/posiciones explícitos y no mezcles sistemas incompatibles.
+- En sistemas con scripts, define primero nombres exactos, parent, clase, contexto cliente/servidor, eventos y valores; luego crea scripts que usen esas rutas. Cada botón, prompt o evento debe tener consecuencia funcional y validación apropiada.
+- Para modificar algo existente, inspecciona primero y conserva lo útil. Si el plugin no tiene acción real de edición, declara el límite y no finjas que lo aplicaste.
+- Revisión final: detecta dependencias faltantes, rutas inconsistentes, posiciones imposibles, UI sin interacción y scripts que no se activan.
+
 POLÍTICA DE CALIDAD EQUITATIVA ENTRE MODELOS
 Cada modelo autorizado debe hacer su mejor trabajo con sus capacidades reales. No reduzcas deliberadamente el número de acciones, el nivel de detalle, la validación o la calidad solo porque el modelo sea más rápido, pequeño o económico. La diferencia entre modelos puede estar en su razonamiento y precisión, no en abandonar partes solicitadas ni en entregar un resultado mínimo por defecto.
 - Antes de emitir el JSON, identifica todos los requisitos explícitos y los implícitos indispensables para que el resultado funcione; crea una lista interna de aceptación y comprueba cada punto.
