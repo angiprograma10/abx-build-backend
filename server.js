@@ -61,11 +61,12 @@ function usageFor(clientId) {
   const used = dailyTokenUsage.get(clientId + ':' + day) || 0;
   return { dailyLimit: DAILY_TOKEN_LIMIT, used, remaining: Math.max(0, DAILY_TOKEN_LIMIT - used), day };
 }
-function spendDailyToken(clientId) {
+function spendDailyToken(clientId, amount = 1) {
+  const cost = Math.max(1, Math.floor(Number(amount) || 1));
   const key = clientId + ':' + tokenDay();
   const used = dailyTokenUsage.get(key) || 0;
-  if (used >= DAILY_TOKEN_LIMIT) return null;
-  dailyTokenUsage.set(key, used + 1);
+  if (used + cost > DAILY_TOKEN_LIMIT) return null;
+  dailyTokenUsage.set(key, used + cost);
   return usageFor(clientId);
 }
 
@@ -1920,7 +1921,8 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
           ' acciones en orden; al confirmar la primera acción, el plugin encolará el plan completo.', 3500)
       : reply;
 
-    const usage = spendDailyToken(clientId);
+    const tokenCost = usedModel === 'gemini-3.1-pro-preview' ? 2 : 1;
+    const usage = spendDailyToken(clientId, tokenCost);
     if (!usage) {
       return res.status(429).json({
         ok: false,
