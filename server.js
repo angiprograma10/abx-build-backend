@@ -1661,7 +1661,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
               instructions: effectiveSystemInstruction,
               input: openAIInput,
               text: { format: { type: 'json_object' } },
-              max_output_tokens: CONFIG.maxOutputTokens
+              max_output_tokens: task.maxTokens
             })
           });
         } else if (candidate.provider === 'groq' || candidate.provider === 'mistral') {
