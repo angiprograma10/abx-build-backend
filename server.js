@@ -72,9 +72,7 @@ function spendDailyToken(clientId) {
 const ALLOWED_MODELS = new Set([
   'gemini-3.5-flash-lite',
   'gemini-3.8-flash',
-  'gemini-3.1-pro-preview',
-  'gemini-3.5-flash',
-  'gemini-3-flash-preview'
+  'gemini-3.1-pro-preview'
 ]);
 const ALLOWED_OPENAI_MODELS = new Set();
 const ALLOWED_DEEPSEEK_MODELS = new Set();
