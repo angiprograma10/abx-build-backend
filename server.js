@@ -23,7 +23,7 @@ const CONFIG = Object.freeze({
   maxHistoryItems: 20,
   maxHistoryText: 1800,
   maxOutputTokens: 16000,
-  geminiTimeoutMs: 90000,
+  geminiTimeoutMs: 10 * 60 * 1000, // Give Gemini up to 10 minutes for deep construction/review tasks.
   sessionTtlMs: 6 * 60 * 60 * 1000,
   maxQueuedActions: 40,
   maxPlanActions: 30,
@@ -153,10 +153,12 @@ function taskProfile(message, buildMode) {
   const game = buildMode === 'full-game' || /juego|game|obby|simulador|simulator|tycoon|rpg|rondas|niveles|mapa completo/i.test(text);
   const build = /crea|crear|construye|construir|diseña|diseñar|genera|generar|programa|programar|implementa|implementar|arregla|arreglar|corrige|corregir|modifica|modificar|haz|hacer|build|create|design|generate|script|interfaz|ui|sistema|depur|debug|repar|fall[oa]|error|refactor|optimiza/i.test(text);
   const connectedSystem = /conectad[oa]|funcional|interactivo|dependencias|cliente|servidor|remoteevent|remotefunction|guardar datos|persisten|inventario|econom[ií]a|misiones|recompensas|multijugador|arquitectura|seguridad|rendimiento/i.test(text);
-  if (game && professional) return { tier: 'professional', maxTokens: 12000, reasoning: 'high' };
-  if (game) return { tier: 'game', maxTokens: 6500, reasoning: 'medium' };
-  if (professional || (build && connectedSystem)) return { tier: 'professional-system', maxTokens: 6500, reasoning: 'high' };
-  if (build) return { tier: 'construction', maxTokens: 3500, reasoning: 'medium' };
+  // Reserve a much larger output budget for construction and engineering tasks.
+  // Simple questions remain lightweight; actual build tasks can return complete plans.
+  if (game && professional) return { tier: 'professional', maxTokens: 16000, reasoning: 'high' };
+  if (game) return { tier: 'game', maxTokens: 12000, reasoning: 'high' };
+  if (professional || (build && connectedSystem)) return { tier: 'professional-system', maxTokens: 12000, reasoning: 'high' };
+  if (build) return { tier: 'construction', maxTokens: 8000, reasoning: 'high' };
   return { tier: 'simple', maxTokens: 2200, reasoning: 'low' };
 }
 
