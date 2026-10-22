@@ -14,7 +14,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || '';
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4-mini';
 
 const CONFIG = Object.freeze({
@@ -62,18 +62,20 @@ function usageFor(clientId) {
   return { dailyLimit: DAILY_TOKEN_LIMIT, used, remaining: Math.max(0, DAILY_TOKEN_LIMIT - used), day };
 }
 function spendDailyToken(clientId, amount = 1) {
-  const cost = Math.max(1, Math.floor(Number(amount) || 1));
+  const cost = Math.max(0, Math.floor(Number(amount) || 0));
   const key = clientId + ':' + tokenDay();
   const used = dailyTokenUsage.get(key) || 0;
   if (used + cost > DAILY_TOKEN_LIMIT) return null;
-  dailyTokenUsage.set(key, used + cost);
+  if (cost > 0) dailyTokenUsage.set(key, used + cost);
   return usageFor(clientId);
 }
 
 const ALLOWED_MODELS = new Set([
+  'gemini-3.1-flash-lite',
   'gemini-3.5-flash-lite',
+  'gemini-3.6-flash',
   'gemini-3.8-flash',
-  'gemini-3.1-pro-preview'
+  'gemini-4-argon'
 ]);
 const ALLOWED_OPENAI_MODELS = new Set();
 const ALLOWED_DEEPSEEK_MODELS = new Set();
@@ -87,6 +89,26 @@ function providerForModel(model) {
   return 'gemini';
 }
 const MODEL_TIER_INSTRUCTIONS = Object.freeze({
+  'gemini-4-argon': `
+NIVEL 5 — ARQUITECTO ULTRA ABX BUILD
+Realiza razonamiento de varias etapas antes de emitir el JSON. Descompón el objetivo en requisitos comprobables, define dependencias y orden de montaje, valida referencias y conexiones entre objetos, scripts y UI. Para mapas, verifica escala, apoyos, alineación, accesos y rutas jugables; para interfaces, jerarquía, adaptabilidad, estados y acciones funcionales; para código, contexto servidor/cliente, seguridad y limpieza. Devuelve solo acciones compatibles con el plugin y no afirmes que ejecutaste pruebas que no se realizaron.
+`,
+  'gemini-3.8-flash': `
+NIVEL 4 — CONSTRUCTOR PRO ABX BUILD
+Trata la petición como un resultado de Studio, no como una lista de nombres. Antes del JSON, organiza mentalmente objetivo y criterios de aceptación, jerarquía espacial/visual, dependencias, orden de acciones, conexiones funcionales y revisión final. En construcciones 3D define origen, escala, orientación, separación y puntos de unión; apoya edificios en el suelo, alinea paredes y techos, deja rutas transitables y evita piezas flotantes o duplicadas. En UI define propósito, jerarquía, layout, anclajes, tamaños, colores, estados, acciones de botones y feedback; no uses posiciones aleatorias ni mezcles UIListLayout con hijos posicionados manualmente. En scripts comprueba contexto servidor/cliente, rutas, eventos, validación, ciclo de vida y limpieza. Prioriza que todo quede conectado y bien montado, no solo que existan los objetos.
+`,
+  'gemini-3.6-flash': `
+NIVEL 3 — CONSTRUCTOR EQUILIBRADO ABX BUILD
+Planea el orden de construcción antes de emitir acciones. Divide sistemas en servidor/cliente/módulos según corresponda; crea primero carpetas, valores y remotos requeridos. Para juegos, entrega un ciclo jugable conectado (inicio, acción principal, recompensa, UI y reinicio). Revisa mentalmente el contrato de cada acción y los enlaces entre scripts. Prioriza resultados completos, no solo objetos decorativos.
+`,
+  'gemini-3.1-flash-lite': `
+NIVEL 1 — ASISTENTE RÁPIDO ABX BUILD
+Resuelve rápido y directamente. Para cambios pequeños, usa el mínimo de acciones necesarias sin sacrificar funcionalidad. Comprueba nombres, rutas, tipos y dependencias; no agregues sistemas que no se pidieron.
+`,
+  'gemini-3.5-flash-lite': `
+NIVEL 2 — DESARROLLADOR PRÁCTICO ABX BUILD
+Interpreta el objetivo completo y anticipa dependencias. Para cada función conecta entrada, lógica, estado y resultado visible. Diseña UI adaptable, con jerarquía visual, restricciones de tamaño y feedback. En scripts, cubre inicialización, estados vacíos, errores y limpieza de eventos.
+`,
   'gemini-3.8-flash': `
 NIVEL 4 — CONSTRUCTOR PRINCIPAL ABX BUILD
 Trata la petición como un resultado de Studio, no como una lista de nombres. Antes del JSON, organiza mentalmente objetivo y criterios de aceptación, jerarquía espacial/visual, dependencias, orden de acciones, conexiones funcionales y revisión final. En construcciones 3D define origen, escala, orientación, separación y puntos de unión; apoya edificios en el suelo, alinea paredes y techos, deja rutas transitables y evita piezas flotantes o duplicadas. En UI define propósito, jerarquía, layout, anclajes, tamaños, colores, estados, acciones de botones y feedback; no uses posiciones aleatorias ni mezcles UIListLayout con hijos posicionados manualmente. En scripts comprueba contexto servidor/cliente, rutas, eventos, validación, ciclo de vida y limpieza. Prioriza que todo quede conectado y bien montado, no solo que existan los objetos.
@@ -1921,7 +1943,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
           ' acciones en orden; al confirmar la primera acción, el plugin encolará el plan completo.', 3500)
       : reply;
 
-    const tokenCost = usedModel === 'gemini-3.1-pro-preview' ? 2 : 1;
+    const tokenCost = ({ 'gemini-3.8-flash': 2, 'gemini-4-argon': 3 })[usedModel] || 0;
     const usage = spendDailyToken(clientId, tokenCost);
     if (!usage) {
       return res.status(429).json({
