@@ -1484,26 +1484,52 @@ function chatMessageText(payload) {
 function parseModelJson(output) {
   if (typeof output !== 'string' || !output.trim()) return null;
 
+  // Providers sometimes wrap otherwise valid JSON in Markdown or add a short
+  // preamble. Extract the first balanced JSON object without cutting braces
+  // that occur inside strings.
   const cleaned = output.trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '');
-
-  try {
-    const result = JSON.parse(cleaned);
-    return isObject(result) ? result : null;
-  } catch {
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start >= 0 && end > start) {
-      try {
-        const result = JSON.parse(cleaned.slice(start, end + 1));
-        return isObject(result) ? result : null;
-      } catch {
-        return null;
+    .replace(/^\x60\x60\x60(?:json)?\s*/i, '')
+    .replace(/\s*\x60\x60\x60$/, '');
+  const candidates = [cleaned];
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === '}' && depth > 0) {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        candidates.push(cleaned.slice(start, i + 1));
+        break;
       }
     }
-    return null;
   }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (isObject(parsed)) return parsed;
+    } catch {
+      // Try conservative repairs that do not rewrite string contents.
+    }
+    const repaired = candidate.replace(/,\s*([}\]])/g, '$1');
+    try {
+      const parsed = JSON.parse(repaired);
+      if (isObject(parsed)) return parsed;
+    } catch {}
+  }
+  return null;
 }
 
 app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) => {
