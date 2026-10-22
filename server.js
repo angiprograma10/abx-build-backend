@@ -75,7 +75,7 @@ const ALLOWED_MODELS = new Set([
   'gemini-3.5-flash-lite',
   'gemini-3.6-flash',
   'gemini-3.8-flash',
-  'gemini-4-argon'
+  'gemini-3.1-pro-preview'
 ]);
 const ALLOWED_OPENAI_MODELS = new Set();
 const ALLOWED_DEEPSEEK_MODELS = new Set();
@@ -89,7 +89,7 @@ function providerForModel(model) {
   return 'gemini';
 }
 const MODEL_TIER_INSTRUCTIONS = Object.freeze({
-  'gemini-4-argon': `
+  'gemini-3.1-pro-preview': `
 NIVEL 5 — ARQUITECTO ULTRA ABX BUILD
 Realiza razonamiento de varias etapas antes de emitir el JSON. Descompón el objetivo en requisitos comprobables, define dependencias y orden de montaje, valida referencias y conexiones entre objetos, scripts y UI. Para mapas, verifica escala, apoyos, alineación, accesos y rutas jugables; para interfaces, jerarquía, adaptabilidad, estados y acciones funcionales; para código, contexto servidor/cliente, seguridad y limpieza. Devuelve solo acciones compatibles con el plugin y no afirmes que ejecutaste pruebas que no se realizaron.
 `,
@@ -1607,7 +1607,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     : (ALLOWED_MODELS.has(envModel) ? envModel
       : 'gemini-3.5-flash-lite');
   const selectedProvider = providerForModel(model);
-  const requestedTokenCost = ({ 'gemini-3.8-flash': 2, 'gemini-4-argon': 3 })[model] || 0;
+  const requestedTokenCost = ({ 'gemini-3.8-flash': 2, 'gemini-3.1-pro-preview': 3 })[model] || 0;
   if (tokenState.remaining < requestedTokenCost) {
     return res.status(429).json({
       ok: false,
@@ -1935,7 +1935,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
           ' acciones en orden; al confirmar la primera acción, el plugin encolará el plan completo.', 3500)
       : reply;
 
-    const tokenCost = ({ 'gemini-3.8-flash': 2, 'gemini-4-argon': 3 })[usedModel] || 0;
+    const tokenCost = ({ 'gemini-3.8-flash': 2, 'gemini-3.1-pro-preview': 3 })[usedModel] || 0;
     const usage = spendDailyToken(clientId, tokenCost);
     if (!usage) {
       return res.status(429).json({
