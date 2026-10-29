@@ -14,7 +14,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || '';
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4-mini';
 
 const CONFIG = Object.freeze({
@@ -70,8 +70,8 @@ function spendDailyToken(clientId, amount = 1) {
   return usageFor(clientId);
 }
 
-const FREE_GEMINI_MODELS = new Set(['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
-const FREE_GEMINI_FALLBACKS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+const FREE_GEMINI_MODELS = new Set(['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
+const FREE_GEMINI_FALLBACKS = ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
 const ALLOWED_MODELS = new Set([
   'gemini-3.1-flash-lite',
   'gemini-3.5-flash-lite',
