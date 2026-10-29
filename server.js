@@ -14,7 +14,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || '';
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4-mini';
 
 const CONFIG = Object.freeze({
@@ -70,6 +70,8 @@ function spendDailyToken(clientId, amount = 1) {
   return usageFor(clientId);
 }
 
+const FREE_GEMINI_MODELS = new Set(['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
+const FREE_GEMINI_FALLBACKS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
 const ALLOWED_MODELS = new Set([
   'gemini-3.1-flash-lite',
   'gemini-3.5-flash-lite',
@@ -132,6 +134,18 @@ Aplica todos los niveles anteriores con una auditoría final rigurosa. Descompó
 function modelTierInstruction(model) {
   return MODEL_TIER_INSTRUCTIONS[model] || MODEL_TIER_INSTRUCTIONS['gemini-3.5-flash-lite'];
 }
+
+const FREE_MODEL_QUALITY_INSTRUCTION = `
+MEGA FREE-MODEL QUALITY PROTOCOL — OBLIGATORIO
+Trabaja como un desarrollador experto de Roblox Studio, aunque seas un modelo rápido. No confundas velocidad con una solución superficial.
+1) INTERPRETA: identifica el resultado que pidió el usuario, el contenido existente que debe conservarse y los criterios concretos para considerar terminado el trabajo. No inventes datos que no estén en el contexto.
+2) PLAN INTERNO: ordena las acciones por dependencias. Crea primero contenedores y objetos base, luego geometría/UI, y al final scripts que referencian esos objetos. Comprueba mentalmente que cada ruta, nombre, tipo y referencia coincide exactamente.
+3) CONSTRUCCIÓN 3D: calcula dimensiones, orientación, superficies de contacto, separación, simetría y accesibilidad. Apoya las piezas, evita solapamientos accidentales, deja rutas transitables y usa materiales/colores con intención. No reemplaces un diseño pedido por una fila genérica de bloques.
+4) INTERFACES: crea una jerarquía visual clara, alineación consistente, márgenes, contraste legible, tamaños adaptables y estados funcionales. Los botones deben producir una acción real cuando el esquema permita programarla; no inventes propiedades o tipos de acción.
+5) LUAU: usa APIs válidas de Roblox, rutas exactas, contexto correcto (servidor/cliente), eventos conectados, validación en servidor para operaciones sensibles, manejo de estados iniciales y limpieza de conexiones. No afirmes que una prueba fue ejecutada.
+6) JSON Y ESQUEMA: devuelve únicamente JSON válido con reply y actions. Cada acción debe cumplir el esquema permitido. Escapa correctamente strings y saltos de línea. Nunca agregues comentarios, Markdown ni propiedades inventadas. Si la petición es una pregunta, actions debe ser [].
+7) AUTORREVISIÓN: antes de responder, revisa integridad, dependencias, duplicados, errores de sintaxis evidentes, coherencia visual y si el resultado cumple la petición. Corrige los fallos detectados. Si el alcance excede los límites disponibles, prioriza una versión funcional y explícita lo que queda pendiente.
+`;
 
 const JSON_CONTRACT_INSTRUCTION = `
 CONTRATO DE SALIDA OBLIGATORIO:
@@ -1621,7 +1635,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     });
   }
   const task = taskProfile(message, buildMode);
-  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\nPERFIL DE TAREA: ' + task.tier + '. Ajusta el alcance a este perfil y devuelve JSON inmediatamente cuando la tarea sea sencilla.';
+  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + (FREE_GEMINI_MODELS.has(model) ? '\n\n' + FREE_MODEL_QUALITY_INSTRUCTION : '') + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\nPERFIL DE TAREA: ' + task.tier + '. Ajusta el alcance a este perfil y devuelve JSON inmediatamente cuando la tarea sea sencilla.';
 
   // Respect the selected provider: missing credentials are a clear configuration
   // error, rather than silently running a different provider than the user chose.
@@ -1662,6 +1676,13 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     // Respeta estrictamente el modelo solicitado: no cambies de modelo ni proveedor
     // de forma silenciosa. Si falla, devuelve el error al usuario para que pueda decidir.
     const candidates = [{ provider: selectedProvider, model }];
+    // Solo los modelos gratuitos Gemini usan fallback automático entre modelos gratuitos.
+    // Los modelos premium y proveedores seleccionados por el usuario no cambian silenciosamente.
+    if (selectedProvider === 'gemini' && FREE_GEMINI_MODELS.has(model)) {
+      for (const fallbackModel of FREE_GEMINI_FALLBACKS) {
+        if (fallbackModel !== model) candidates.push({ provider: 'gemini', model: fallbackModel });
+      }
+    }
 
     let response = null;
     let payload = {};
