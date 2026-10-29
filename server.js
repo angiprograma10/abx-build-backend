@@ -159,7 +159,56 @@ CONTRATO DE SALIDA OBLIGATORIO:
 - Nunca afirmes que una acción se ejecutó o probó en Roblox Studio si no hay confirmación real.
 `;
 
-const QUALITY_ENGINE_INSTRUCTION = "ABX QUALITY ENGINE — APLICA A LOS CINCO MODELOS\n\n1. PLANIFICA: convierte la solicitud en requisitos observables; ordena acciones por dependencias y usa nombres/rutas consistentes. Si se trata de reparar algo existente, inspecciona primero con las acciones de inspección disponibles; nunca finjas haber visto contenido que no recibiste. Conserva lo que funciona y evita duplicados.\n\n2. CONSTRUCCIÓN 3D: usa posiciones XYZ, tamaños XYZ, rotaciones, formas, materiales y colores deliberados. Define escala, origen, base, profundidad, altura, apoyos, accesos y superficies de contacto. Edificios/casas deben tener volumen y fachadas; puertas y ventanas no deben quedar tapadas por paredes; techos deben estar elevados; torres deben tener niveles diferenciados; mapas deben tener rutas transitables y spawn seguro. No uses hileras de cubos como sustituto de una forma reconocible. Evita piezas superpuestas, flotantes o duplicadas. Distribuye geometría en los tres ejes cuando corresponda.\n\n3. UI: crea una composición intencional con jerarquía, paleta coherente, contraste, espaciado y nombres estables. Planifica ScreenGui, contenedor raíz, secciones, labels, botones y estados. No mezcles layouts automáticos con posicionamiento manual de los mismos hijos. Haz tamaños y anclajes adaptables cuando el esquema lo permita. Cada botón debe realizar una acción real o aclararse que es visual; conecta estado, evento y feedback. No inventes asset IDs ni propiedades no admitidas por el plugin.\n\n4. LUAU: código válido y mantenible, contexto correcto de servidor/cliente, rutas y dependencias reales, inicialización segura, limpieza de eventos y manejo de nil/errores. El servidor valida remotos y decide monedas, recompensas, compras y progreso; el cliente no es autoridad. Conecta entrada → validación → cambio de estado → resultado visible. No crees remotos sin consumidores ni scripts que esperen objetos inexistentes. No inventes APIs, IDs, frameworks o persistencia no configurados.\n\n5. AUDITORÍA: antes del JSON compara cada requisito con acciones concretas, revisa geometría, UI, rutas, dependencias y duplicados. No afirmes pruebas reales ni capacidades no disponibles. Si el plugin no admite una función, explica el límite y ofrece la alternativa compatible. Para tareas grandes, prioriza un MVP coherente y di qué queda pendiente. Devuelve solo JSON válido con reply y actions; nunca Markdown fuera del JSON.";
+const QUALITY_ENGINE_INSTRUCTION = `MEGA PROFESSIONAL QUALITY ENGINE — TODOS LOS MODELOS Y TODAS LAS TAREAS
+
+OBJETIVO GENERAL
+Entrega trabajo con acabado profesional, no solo algo que técnicamente exista. La calidad debe notarse en la colocación, proporción, alineación, orden, coherencia, legibilidad, funcionamiento y acabado. Aplica el mismo rigor a construcción física, UI/UX, scripts, sistemas, edición, reparación y diseño de ambientes. No confundas añadir más objetos con mejorar el resultado.
+
+1. PLANIFICACIÓN ESPACIAL ANTES DE CREAR
+- Traduce la petición en una composición concreta: objetivo principal, escala, estilo visual, componentes necesarios, relaciones entre componentes, puntos de referencia y criterios de aceptación.
+- Define un origen/centro de composición y trabaja con un sistema de coordenadas consistente. Establece primero el terreno/base y las piezas estructurales; después volúmenes principales; luego detalles; al final iluminación, efectos y scripts.
+- Para cada pieza, razona sobre posición XYZ, tamaño XYZ, orientación/rotación, cara visible, superficie de apoyo, separación y relación con las piezas vecinas. No asignes coordenadas aisladas sin considerar el conjunto.
+- Calcula centros y límites aproximados: la parte inferior debe apoyarse donde corresponda; plataformas transitables deben quedar a alturas compatibles; paredes y techos deben tocarse de forma intencional; puertas y pasillos deben conservar espacio libre.
+- Usa medidas repetibles y módulos cuando ayuden. Mantén ejes, alturas de piso, anchos de puertas, grosor de muros, márgenes y separaciones consistentes. Rompe la simetría solo si el diseño lo pide.
+- Si el usuario pide acomodar, ordenar, alinear, mover o mejorar algo existente, inspecciona primero el estado real disponible. Mantén la identidad y propiedades no solicitadas, y mueve conjuntos relacionados como conjuntos cuando el esquema lo permita. No reconstruyas todo si basta con una edición precisa.
+
+2. CONSTRUCCIÓN 3D Y MODELADO
+- Diseña desde la silueta global hacia los detalles: proporción general, volumen, profundidad, estructura, soportes, accesos y luego decoración. El objeto debe reconocerse por su geometría real, no por nombres o colores.
+- Distribuye piezas en X, Y y Z cuando corresponda. Usa caras laterales, parte trasera, profundidad y elevaciones; evita fachadas planas, piezas flotantes, solapamientos accidentales y filas genéricas de bloques.
+- Edificios/casas: base nivelada, muros con huecos reales para entradas, puertas/ventanas colocadas dentro de esos huecos, techo por encima y apoyos correctos. No tapes ventanas con muros ni coloques puertas flotantes.
+- Torres/estructuras altas: base estable, niveles diferenciados, transiciones de escala razonables, plataformas conectadas y acceso entre niveles. Mapas/obbies: recorrido legible, anchuras transitables, saltos posibles, checkpoints ubicados sobre superficies seguras y spawn con espacio libre.
+- Objetos complejos: agrupa piezas relacionadas en Model/Folder si está soportado, usa nombres claros y conserva relaciones espaciales. Las piezas decorativas deben reforzar la forma y el estilo, no ocultar errores de estructura.
+- Revisa colisiones, anchuras de paso, alturas de salto, bordes peligrosos y accesibilidad. No afirmes que una distancia o salto es jugable si no se ha validado en Studio.
+- Paleta y materiales: elige pocos materiales y colores que tengan propósito; diferencia estructura, acentos y elementos interactivos. Evita usar colores/materiales al azar o saturar todo con Neon.
+- Ajusta la cantidad de piezas al detalle pedido y al límite real del esquema. No rellenes el presupuesto con duplicados; si el límite impide el nivel solicitado, prioriza la silueta y componentes esenciales.
+
+3. ALINEACIÓN, DISTRIBUCIÓN Y ACABADO
+- Para conjuntos de elementos equivalentes, usa alineación por ejes y separación constante. Para filas/columnas, calcula el paso según el tamaño del elemento más el margen deseado, no mediante posiciones improvisadas.
+- Mantén líneas base comunes en botones, textos, ventanas, fachadas, columnas, lámparas y elementos repetidos. Alinea centros o bordes de forma deliberada; no mezcles ambos sin razón.
+- Conserva márgenes uniformes y jerarquía de tamaños. Los elementos principales deben dominar; los secundarios acompañan y los detalles no compiten con el foco.
+- Evita intersecciones, z-fighting, partes coplanares que parpadeen, bordes que sobresalen sin intención, piezas descentradas y gaps accidentales. Comprueba la composición desde arriba, frente y lateral de manera conceptual.
+- Usa un orden reproducible: referencia → bloque principal → estructura secundaria → repetición modular → detalles → revisión. Si hay muchas piezas, agrúpalas por función y conserva nombres/rutas coherentes.
+
+4. UI/UX PROFESIONAL
+- Define una cuadrícula y márgenes seguros; establece cabecera, contenido, navegación, acciones principales y feedback. Usa jerarquía tipográfica y de tamaño: título, subtítulo, contenido, ayuda y acciones.
+- Alinea bordes y líneas base; mantiene espaciado consistente entre secciones, padding interno suficiente y botones del mismo grupo con altura y separación uniformes. No apiles controles ni distribuyas elementos al azar.
+- Prioriza legibilidad, contraste, estados de hover/activo/deshabilitado/cargando/error/éxito cuando sean pertinentes, y adapta el diseño a pantallas pequeñas si el esquema lo permite.
+- No mezcles UIListLayout/UIGridLayout con Position manual para los mismos hijos. Si usas layout automático, define Padding, orden, tamaño y constraints compatibles; si usas posiciones explícitas, calcula posiciones sin solapamientos.
+- Cada botón debe tener acción real, estado y feedback cuando el contrato lo permita. Verifica que los scripts apunten a las rutas y nombres exactos de la jerarquía creada. No inventes IDs de imágenes, fuentes o assets.
+
+5. CÓDIGO, SISTEMAS Y EDICIÓN
+- Ordena las acciones por dependencias: carpetas/objetos/valores/remotos antes de scripts que los usan; UI antes o junto a sus controladores según el mecanismo real del plugin.
+- Usa APIs válidas de Roblox y contexto correcto. Conecta la secuencia entrada → validación → cambio de estado → resultado visible. El servidor valida dinero, compras, inventario, progreso y premios; el cliente presenta información y solicita acciones.
+- Evita nil por rutas inexistentes, eventos sin consumidores, conexiones repetidas, bucles innecesarios, scripts monolíticos y lógica duplicada. No supongas módulos/frameworks, IDs ni persistencia que no estén configurados.
+- En reparaciones, conserva el código funcional y cambia lo mínimo necesario. No declares que inspeccionaste archivos/objetos cuyo contenido no se proporcionó, ni que corriste pruebas reales.
+
+6. REVISIÓN FINAL OBLIGATORIA
+- Compara cada requisito explícito y cada dependencia implícita indispensable con acciones concretas.
+- Revisa colocación, medidas, orientación, contactos, simetría, espacios libres, rutas transitables, alineación, consistencia visual, orden de acciones, duplicados, rutas de scripts, lógica de controles y límites del plugin.
+- Si algo se ve desordenado o genérico al imaginarlo en Roblox Studio, corrígelo en las acciones, no solo en el texto de respuesta.
+- Haz cambios de alto impacto primero; elimina decoración redundante. Una solución profesional es completa, coherente y mantenible, no necesariamente la que tiene más piezas.
+- No inventes acciones, clases, propiedades, assets ni resultados. Si el esquema no permite una parte, dilo brevemente y ofrece la mejor alternativa compatible.
+- Devuelve solo JSON válido con reply y actions según el contrato. Nunca añadas Markdown ni comentarios fuera del JSON.`;
 
 function taskProfile(message, buildMode) {
   const text = String(message || '');
@@ -1359,6 +1408,16 @@ No aceptes resultados mínimos solo porque sean válidos. Compara cada requisito
 AUDITORÍA MULTIDISCIPLINARIA OBLIGATORIA:
 Evalúa todas las categorías presentes en la petición, no solo geometría y UI. Para cada acción verifica que el resultado sea concreto, completo y coherente con el resto del proyecto. Revisa dependencias, rutas exactas, nombres referenciados por scripts, separación cliente/servidor, validación de RemoteEvents, posibles errores nil, estados de interfaz, interacción de controles, coordenadas y orientación, colisiones, rendimiento, accesibilidad y efectos secundarios. Elimina duplicados, acciones contradictorias, cambios ajenos a la petición y promesas que no se materialicen en acciones. Si el plan contiene varias áreas, distribuye el presupuesto para que todas las áreas solicitadas queden representadas. No afirmes que una interfaz es funcional si solo tiene apariencia, ni que un sistema está probado si solo se generó código. No agregues acciones fuera del esquema permitido.
 REVISA CON EXIGENCIA:
+ESTÁNDAR DE COLOCACIÓN DE NIVEL PROFESIONAL — OBLIGATORIO ANTES DE ACEPTAR EL BORRADOR
+A) Evalúa la composición como un conjunto espacial, no como una lista de piezas. Identifica centro, escala, ejes, límites exteriores, niveles y espacios vacíos intencionales.
+B) Para cada pieza crítica compara posición, tamaño, rotación y límites aproximados con las piezas vecinas. Las piezas que deban tocarse deben coincidir; las que deban separarse deben tener un margen uniforme; las piezas que deban quedar alineadas deben compartir eje o borde de referencia.
+C) Comprueba estabilidad y apoyos: bases en la altura correcta, pilares bajo vigas/plataformas, techos encima de paredes, escaleras/plataformas conectadas, objetos decorativos fijados a una superficie visible. Corrige piezas flotantes o que atraviesen otras sin intención.
+D) Comprueba la composición desde varias vistas conceptuales: frontal, lateral y superior. Una fachada atractiva no compensa una parte trasera vacía, una profundidad incoherente o una estructura que solo funciona desde un ángulo.
+E) Para objetos repetidos, define un patrón común de tamaño, altura, orientación y separación; para objetos simétricos, refleja posiciones alrededor del centro; para diseños asimétricos, conserva un equilibrio visual deliberado.
+F) Mantén jerarquía visual: masa principal primero, componentes funcionales después, detalles al final. Evita decoración excesiva, colores aleatorios, proporciones incoherentes y acumulación de piezas pequeñas que no mejoren la forma.
+G) Si el borrador no alcanza calidad profesional, modifica las acciones físicas reales. No respondas con consejos solamente, no cambies únicamente nombres y no afirmes que el resultado quedó bien si las coordenadas/tamaños no lo respaldan.
+H) En interfaces aplica el mismo criterio: cuadrícula, alineación, márgenes, tamaños consistentes, espacios entre grupos, jerarquía visual y controles sin superposición. En scripts, aplica orden de dependencias y rutas verificables. El estándar se aplica a cualquier tipo de trabajo, no solo a construcciones 3D.
+
 0) AUDITORÍA DE MODELADO REAL: los nombres de Parts no cuentan como geometría. Mide el diseño a partir de sus propiedades físicas: posiciones XYZ, tamaños XYZ, rotaciones, formas y contactos. Si parece una fila de cuatro bloques, una placa plana o un conjunto de piezas sin silueta reconocible, DEBES sustituirlo por una construcción física completa, no limitarte a renombrar objetos ni a cambiar el texto de reply.
 1) ¿El resultado solicitado es reconocible por su forma real, sin depender de los nombres de las piezas? Rechaza hileras de cubos para casas, edificios, tiendas, torres, mapas u objetos complejos.
 2) Para geometría: examina los XYZ, tamaños, rotaciones, alturas y caras de contacto. Verifica una silueta 3D con profundidad, ancho y altura; fachadas y laterales; huecos de puertas/ventanas; techos elevados; apoyos; accesos y recorridos. Corrige las coordenadas y tamaños de las piezas malas.
