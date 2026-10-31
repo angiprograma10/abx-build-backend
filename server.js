@@ -1543,6 +1543,96 @@ function analyzeStructureGeometry(actions) {
   return reports;
 }
 
+async function createBuildBlueprint({ model, apiKey, message, history, signal, buildMode }) {
+  // Planificación previa estructurada: entrega decisiones ejecutables, nunca una cadena de pensamiento privada.
+  const planningPrompt = [
+    'Actúa como arquitecto principal de Roblox Studio para MEGA.',
+    'Prepara un plano de ejecución breve y concreto ANTES de que otro paso genere las acciones.',
+    'No escribas código Luau ni acciones JSON finales. No inventes capacidades del plugin.',
+    'Devuelve SOLO JSON válido con estas claves:',
+    '{"objective":"...","requirements":["..."],"architecture":["..."],"spatialPlan":["..."],"uiPlan":["..."],"scriptPlan":["..."],"dependencies":["..."],"risks":["..."],"acceptanceChecks":["..."],"scopeDecision":"..."}',
+    'REGLAS:',
+    '- Extrae requisitos explícitos e implícitos necesarios para cumplir la petición sin añadir funciones irrelevantes.',
+    '- Construcción física: define origen, escala, límites, distribución XYZ, alturas, apoyos, huecos, profundidad, recorridos y orden de montaje.',
+    '- UI: define jerarquía, contenedores, tamaños/posiciones UDim2, márgenes, contraste, estados y qué controles necesitan comportamiento.',
+    '- Scripts: asigna cada responsabilidad a servidor o cliente, define rutas exactas, nombres compartidos, dependencias, eventos, validación y limpieza.',
+    '- Sistemas: conecta entrada del jugador, reglas, estado, feedback, recompensa y reinicio cuando correspondan.',
+    '- Identifica qué puede hacerse realmente con las acciones permitidas: CREATE_PART, CREATE_STRUCTURE, CREATE_TREE, CREATE_SCRIPT, CREATE_FOLDER, CREATE_VALUE, CREATE_REMOTE, CREATE_OBJECT, CREATE_SYSTEM, SET_PROPERTIES y acciones de inspección/edición admitidas.',
+    '- Respeta límites: máximo 30 acciones por plan, 60 piezas por CREATE_STRUCTURE, 300 nodos por árbol y 10000 caracteres por script.',
+    '- No reduzcas una construcción compleja a una fila de bloques. Tampoco aumentes piezas sin propósito.',
+    '- Si falta un dato no esencial, elige una opción razonable y coherente; si falta un dato esencial, indícalo en scopeDecision.',
+    '- Las comprobaciones deben poder evaluarse a partir de las acciones y propiedades que se generen.',
+    'MODO: ' + (buildMode === 'full-game' ? 'juego completo/MVP' : 'construcción o edición estándar'),
+    'PETICIÓN DEL USUARIO: ' + message,
+    'CONTEXTO RECIENTE: ' + history.slice(-6).map(item => item.role + ': ' + item.parts.map(part => part.text || '').join('')).join('\n')
+  ].join('\n');
+
+  try {
+    const response = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/' +
+        encodeURIComponent(model) + ':generateContent',
+      {
+        method: 'POST',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + '\n\n' + UNIVERSAL_EXECUTION_STANDARD }]
+          },
+          contents: [{ role: 'user', parts: [{ text: planningPrompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.1,
+            maxOutputTokens: 2200
+          }
+        })
+      }
+    );
+    if (!response.ok) {
+      console.warn('[MEGA_PLAN] planner_http_error', JSON.stringify({ model, status: response.status }));
+      return '';
+    }
+    const payload = await response.json().catch(() => ({}));
+    const output = payload?.candidates?.[0]?.content?.parts
+      ?.map(part => typeof part.text === 'string' ? part.text : '')
+      .join('').trim();
+    const plan = parseModelJson(output);
+    if (!plan || typeof plan.objective !== 'string' ||
+        !Array.isArray(plan.requirements) || !Array.isArray(plan.acceptanceChecks)) {
+      console.warn('[MEGA_PLAN] planner_invalid_output', JSON.stringify({ model, outputLength: output.length }));
+      return '';
+    }
+    const bounded = {
+      objective: cleanText(plan.objective, 500),
+      requirements: plan.requirements.slice(0, 14).map(item => cleanText(item, 240)).filter(Boolean),
+      architecture: Array.isArray(plan.architecture) ? plan.architecture.slice(0, 12).map(item => cleanText(item, 240)).filter(Boolean) : [],
+      spatialPlan: Array.isArray(plan.spatialPlan) ? plan.spatialPlan.slice(0, 16).map(item => cleanText(item, 240)).filter(Boolean) : [],
+      uiPlan: Array.isArray(plan.uiPlan) ? plan.uiPlan.slice(0, 12).map(item => cleanText(item, 240)).filter(Boolean) : [],
+      scriptPlan: Array.isArray(plan.scriptPlan) ? plan.scriptPlan.slice(0, 12).map(item => cleanText(item, 240)).filter(Boolean) : [],
+      dependencies: Array.isArray(plan.dependencies) ? plan.dependencies.slice(0, 14).map(item => cleanText(item, 240)).filter(Boolean) : [],
+      risks: Array.isArray(plan.risks) ? plan.risks.slice(0, 10).map(item => cleanText(item, 200)).filter(Boolean) : [],
+      acceptanceChecks: plan.acceptanceChecks.slice(0, 14).map(item => cleanText(item, 240)).filter(Boolean),
+      scopeDecision: cleanText(plan.scopeDecision, 500)
+    };
+    const serialized = JSON.stringify(bounded);
+    console.info('[MEGA_PLAN] blueprint_ready', JSON.stringify({
+      model,
+      requirements: bounded.requirements.length,
+      architecture: bounded.architecture.length,
+      spatialChecks: bounded.spatialPlan.length,
+      acceptanceChecks: bounded.acceptanceChecks.length
+    }));
+    return serialized.length <= 9000 ? serialized : serialized.slice(0, 9000);
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    console.warn('[MEGA_PLAN] planner_exception', JSON.stringify({ model, name: error?.name || 'Error' }));
+    return '';
+  }
+}
+
 async function reviewConstructionDraft({ provider, model, apiKey, message, draft, history, signal }) {
   // Este revisor solo implementa los protocolos Gemini/OpenAI; evita llamar por error a Gemini con otra clave.
   if (provider !== 'openai' && provider !== 'gemini') return draft;
@@ -1797,14 +1887,9 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   }
 
   const history = normalizeHistory(req.body?.history);
-  const effectiveMessage = buildMode === 'full-game'
-    ? message + `\n\n[ABX BUILD — MODO JUEGO COMPLETO]\nInterpreta esta solicitud como un proyecto de juego Roblox jugable de alcance pequeño pero coherente, creado desde un solo prompt. Devuelve un plan ordenado en actions con hasta ${CONFIG.maxPlanActions} acciones válidas del esquema. Incluye, según corresponda: (1) escenario y spawn seguros; (2) ciclo principal realmente jugable; (3) UI real con jerarquía CREATE_TREE; (4) scripts separados entre servidor y cliente; (5) remotos/carpetas/valores necesarios antes de scripts dependientes; (6) recompensas, progreso y condiciones de reinicio; (7) iluminación/ambiente cuando sea útil. Usa CREATE_STRUCTURE para geometría compacta y CREATE_TREE para jerarquías. Mantén cada script por debajo de ${CONFIG.maxScriptLength} caracteres. Ordena acciones para que sus dependencias existan antes de usarlas. Evita acciones cosméticas que no ayuden al juego. Si no cabe un juego completo dentro de los límites del esquema, prioriza un MVP coherente y jugable, y di exactamente qué queda pendiente. No prometas pruebas que no se hayan ejecutado. La salida debe conservar el JSON de contrato con reply y actions; no inventes tipos de acción.`
+  let effectiveMessage = buildMode === 'full-game'
+    ? message + `\n\n[MEGA — MODO JUEGO COMPLETO]\nInterpreta esta solicitud como un proyecto de juego Roblox jugable de alcance pequeño pero coherente, creado desde un solo prompt. Devuelve un plan ordenado en actions con hasta ${CONFIG.maxPlanActions} acciones válidas del esquema. Incluye, según corresponda: (1) escenario y spawn seguros; (2) ciclo principal realmente jugable; (3) UI real con jerarquía CREATE_TREE; (4) scripts separados entre servidor y cliente; (5) remotos/carpetas/valores necesarios antes de scripts dependientes; (6) recompensas, progreso y condiciones de reinicio; (7) iluminación/ambiente cuando sea útil. Usa CREATE_STRUCTURE para geometría compacta y CREATE_TREE para jerarquías. Mantén cada script por debajo de ${CONFIG.maxScriptLength} caracteres. Ordena acciones para que sus dependencias existan antes de usarlas. Evita acciones cosméticas que no ayuden al juego. Si no cabe un juego completo dentro de los límites del esquema, prioriza un MVP coherente y jugable, y di exactamente qué queda pendiente. No prometas pruebas que no se hayan ejecutado. La salida debe conservar el JSON de contrato con reply y actions; no inventes tipos de acción.`
     : message;
-  const contents = history.map(item => ({
-    role: item.role === 'model' ? 'model' : 'user',
-    parts: item.parts
-  }));
-  contents.push({ role: 'user', parts: [{ text: effectiveMessage }] });
 
   const controller = new AbortController();
   const timeout = setTimeout(
@@ -1814,6 +1899,35 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   session.chatBusy = true;
   // Prevent a previous unconfirmed plan from being applied by a later prompt.
   session.pendingPlan = null;
+
+  // Los proyectos complejos pasan por: plano técnico -> generación -> auditoría.
+  // Las peticiones simples evitan esta llamada adicional para conservar rapidez.
+  const requiresBlueprint = selectedProvider === 'gemini' && (
+    buildMode === 'full-game' ||
+    message.length > 140 ||
+    /\b(juego|game|mapa|map|obby|casa|edificio|estadio|castillo|tienda|sistema|inventario|monedas|checkpoints|interfaz|dashboard|menú|menu|construcción|construccion|detallad[oa]|completo|profesional|varios|múltiples|multiples|scripts|mecánica|mecanica)\b/i.test(message)
+  );
+  if (requiresBlueprint) {
+    const blueprint = await createBuildBlueprint({
+      model,
+      apiKey: apiKeyForProvider(selectedProvider),
+      message: effectiveMessage,
+      history,
+      signal: controller.signal,
+      buildMode
+    });
+    if (blueprint) {
+      effectiveMessage += '\n\n[PLANO TÉCNICO PREVIO DE MEGA — DEBES CONVERTIRLO EN ACCIONES REALES Y VERIFICARLO]\n' +
+        blueprint +
+        '\nNo copies el plano como texto de respuesta. Materializa sus requisitos en acciones válidas, respeta dependencias y límites, y corrige cualquier decisión que choque con la petición original.';
+    }
+  }
+
+  const contents = history.map(item => ({
+    role: item.role === 'model' ? 'model' : 'user',
+    parts: item.parts
+  }));
+  contents.push({ role: 'user', parts: [{ text: effectiveMessage }] });
 
   try {
     // Respeta estrictamente el modelo solicitado: no cambies de modelo ni proveedor
