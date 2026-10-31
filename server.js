@@ -131,6 +131,19 @@ NIVEL 5 — INGENIERO PRINCIPAL ABX BUILD
 Aplica todos los niveles anteriores con una auditoría final rigurosa. Descompón la petición en requisitos verificables; asigna cada requisito a acciones concretas y comprueba que no haya referencias rotas, scripts sin dependencias, UI sin lógica o lógica sin feedback. Prefiere la solución más completa que quepa en el contrato permitido, pero evita complejidad superflua. Considera exploits, concurrencia, persistencia, recuperación de errores y coste de ejecución cuando sean relevantes. No inventes APIs, IDs, pruebas ni dependencias. Si la solicitud es grande, entrega un MVP jugable coherente y declara lo pendiente.
 `
 });
+const UNIVERSAL_EXECUTION_STANDARD = `
+MEGA — ESTÁNDAR FINAL OBLIGATORIO PARA TODOS LOS MODELOS
+Estas reglas prevalecen sobre cualquier instrucción de rapidez, brevedad o nivel inferior que aparezca antes:
+- No entregues una versión genérica por defecto. Diseña cada resultado específicamente a partir de la petición, no reutilices una plantilla con nombres y colores cambiados.
+- Antes de generar, identifica requisitos explícitos, estilo/identidad, escala, proporciones, componentes funcionales, relaciones espaciales, dependencias y criterios verificables de terminado.
+- En 3D, piensa en coordenadas y dimensiones como un plano de construcción: define origen, límites, volumen, niveles, apoyos, ejes, caras, huecos, uniones, márgenes y circulación. Distribuye las piezas deliberadamente en X/Y/Z.
+- Construye de lo estructural a lo detallado. Cada pieza debe tener una razón, una posición coherente y una relación clara con el conjunto. Evita bloques aleatorios, filas planas, objetos flotantes, solapamientos accidentales y decoraciones que no aportan.
+- Para UI, define una cuadrícula, jerarquía, márgenes, tamaños, alineación, contraste, estados y comportamiento real. Para scripts/sistemas, define arquitectura, rutas, dependencias, validación, flujo de estados, errores y feedback.
+- En tareas grandes, usa el presupuesto disponible para entregar la versión más completa y coherente posible; no reduzcas automáticamente una construcción compleja a 4-6 piezas. Respeta los límites técnicos reales del plugin y no inventes capacidades.
+- Revisa el resultado contra cada requisito antes de devolverlo. Si la composición es genérica, incompleta o espacialmente incoherente, vuelve a diseñar las acciones. El texto de reply nunca sustituye las acciones reales.
+- No declares que el proyecto fue probado en Studio si no hubo ejecución y confirmación real.
+`;
+
 function modelTierInstruction(model) {
   return MODEL_TIER_INSTRUCTIONS[model] || MODEL_TIER_INSTRUCTIONS['gemini-3.5-flash-lite'];
 }
@@ -1765,7 +1778,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     });
   }
   const task = taskProfile(message, buildMode);
-  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + (FREE_GEMINI_MODELS.has(model) ? '\n\n' + FREE_MODEL_QUALITY_INSTRUCTION : '') + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\nPERFIL DE TAREA: ' + task.tier + '. Ajusta el alcance a este perfil y devuelve JSON inmediatamente cuando la tarea sea sencilla.';
+  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + (FREE_GEMINI_MODELS.has(model) ? '\n\n' + FREE_MODEL_QUALITY_INSTRUCTION : '') + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\nPERFIL DE TAREA: ' + task.tier + '. Ajusta el alcance a este perfil y devuelve JSON inmediatamente cuando la tarea sea sencilla.\n\n' + UNIVERSAL_EXECUTION_STANDARD;
 
   // Respect the selected provider: missing credentials are a clear configuration
   // error, rather than silently running a different provider than the user chose.
@@ -1871,7 +1884,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             : 'https://api.mistral.ai/v1/chat/completions';
           const messages = candidate.provider === 'groq'
             ? [
-                { role: 'system', content: SYSTEM_INSTRUCTION + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + GROQ_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\nPERFIL DE TAREA: ' + task.tier + '. Revisa internamente los requisitos, dependencias y resultados visibles antes de devolver el JSON. Ajusta el tamaño de la solución al presupuesto disponible sin dejar incompleta la función principal.' },
+                { role: 'system', content: SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + GROQ_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\n' + UNIVERSAL_EXECUTION_STANDARD + '\n\nPERFIL DE TAREA: ' + task.tier + '. Revisa internamente los requisitos, dependencias y resultados visibles antes de devolver el JSON. Ajusta el tamaño de la solución al presupuesto disponible sin dejar incompleta la función principal.' },
                 ...history.map(item => ({ role: item.role === 'model' ? 'assistant' : 'user', content: item.parts.map(part => part.text || '').join('') })),
                 { role: 'user', content: effectiveMessage }
               ]
