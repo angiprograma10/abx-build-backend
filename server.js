@@ -1407,6 +1407,13 @@ AUDITORÍA DE ESFUERZO Y EFICIENCIA ENTRE MODELOS:
 No aceptes resultados mínimos solo porque sean válidos. Compara cada requisito del usuario con las acciones propuestas y señala/corrige omisiones esenciales. A la vez, elimina duplicados, pasos que no cambian nada y complejidad decorativa que no ayude al objetivo. Busca el mejor equilibrio: resultado completo y sólido con el menor número razonable de acciones. Aplica el mismo estándar de revisión para cualquier modelo generador, sin preferir borradores por proveedor o modelo. Si un requisito no se puede expresar en las acciones permitidas, no inventes una acción: conserva lo compatible y explica la limitación.
 AUDITORÍA MULTIDISCIPLINARIA OBLIGATORIA:
 Evalúa todas las categorías presentes en la petición, no solo geometría y UI. Para cada acción verifica que el resultado sea concreto, completo y coherente con el resto del proyecto. Revisa dependencias, rutas exactas, nombres referenciados por scripts, separación cliente/servidor, validación de RemoteEvents, posibles errores nil, estados de interfaz, interacción de controles, coordenadas y orientación, colisiones, rendimiento, accesibilidad y efectos secundarios. Elimina duplicados, acciones contradictorias, cambios ajenos a la petición y promesas que no se materialicen en acciones. Si el plan contiene varias áreas, distribuye el presupuesto para que todas las áreas solicitadas queden representadas. No afirmes que una interfaz es funcional si solo tiene apariencia, ni que un sistema está probado si solo se generó código. No agregues acciones fuera del esquema permitido.
+ANTI-GENERICIDAD — REGLA DE DISEÑO PERSONALIZADO
+No uses una plantilla universal ni repitas la misma composición para peticiones distintas. Antes de corregir, extrae del pedido su identidad visual y funcional: qué objeto/escenario/sistema es, qué estilo pidió, qué elementos lo hacen reconocible, qué proporciones necesita, qué recorrido o interacción tendrá y qué debe destacar. Cada construcción debe tener una composición diseñada específicamente para ese pedido.
+No sustituyas detalles concretos por decoración genérica. Una casa no es una caja con techo: adapta fachada, profundidad, ventanas, entrada, cubierta, estructura y entorno al estilo solicitado. Una tienda, estadio, castillo, bosque, fábrica, torre o mapa necesitan siluetas y distribuciones distintas. No reutilices el mismo patrón de bloques cambiando nombres/colores.
+Cuando el usuario no especifica estilo, elige uno coherente y explica brevemente la decisión en reply; no rellenes la escena con objetos aleatorios. Para peticiones simples, sé preciso y limpio; para peticiones complejas, construye por capas y con suficiente detalle dentro del límite del plugin.
+Usa el diagnóstico geométrico que recibes: si muestra ejes colapsados, variación vertical pobre, duplicados o posibles intersecciones, corrige las coordenadas/tamaños/rotaciones en las acciones. No interpretes toda intersección como error: paredes, pisos y techos pueden necesitar contacto. Prioriza uniones deliberadas y espacios transitables.
+No declares una composición profesional por el número de piezas. La calidad se demuestra por proporción, distribución tridimensional, continuidad, jerarquía, funcionalidad y ajuste exacto al pedido.
+
 REVISA CON EXIGENCIA:
 ESTÁNDAR DE COLOCACIÓN DE NIVEL PROFESIONAL — OBLIGATORIO ANTES DE ACEPTAR EL BORRADOR
 A) Evalúa la composición como un conjunto espacial, no como una lista de piezas. Identifica centro, escala, ejes, límites exteriores, niveles y espacios vacíos intencionales.
@@ -1461,6 +1468,68 @@ function summarizeConstructionDraft(value) {
   };
 }
 
+function analyzeStructureGeometry(actions) {
+  const reports = [];
+  for (const [actionIndex, action] of actions.entries()) {
+    if (action?.type !== 'CREATE_STRUCTURE' || !Array.isArray(action.parts)) continue;
+    const parts = action.parts.filter(part =>
+      Array.isArray(part?.position) && part.position.length === 3 &&
+      Array.isArray(part?.size) && part.size.length === 3 &&
+      [...part.position, ...part.size].every(value => Number.isFinite(Number(value)))
+    );
+    if (!parts.length) {
+      reports.push({ actionIndex, name: cleanText(action.name, 60), issue: 'No hay piezas con posición y tamaño analizables.' });
+      continue;
+    }
+    const axes = [0,1,2].map(axis => {
+      const centers = parts.map(part => Number(part.position[axis]));
+      const sizes = parts.map(part => Math.abs(Number(part.size[axis])));
+      return {
+        min: Math.min(...centers.map((center, i) => center - sizes[i] / 2)),
+        max: Math.max(...centers.map((center, i) => center + sizes[i] / 2)),
+        distinctCenters: new Set(centers.map(value => Math.round(value * 100) / 100)).size
+      };
+    });
+    let exactDuplicates = 0;
+    let likelyAabbIntersections = 0;
+    for (let i = 0; i < parts.length; i++) {
+      for (let j = i + 1; j < parts.length; j++) {
+        const a = parts[i], b = parts[j];
+        const same = [0,1,2].every(axis =>
+          Number(a.position[axis]) === Number(b.position[axis]) &&
+          Number(a.size[axis]) === Number(b.size[axis])
+        );
+        if (same) exactDuplicates++;
+        const intersects = [0,1,2].every(axis =>
+          Math.abs(Number(a.position[axis]) - Number(b.position[axis])) <
+          (Math.abs(Number(a.size[axis])) + Math.abs(Number(b.size[axis]))) / 2 - 0.01
+        );
+        if (intersects && !same) likelyAabbIntersections++;
+      }
+    }
+    const issues = [];
+    if (parts.length >= 4 && axes.some(axis => axis.distinctCenters === 1)) {
+      issues.push('Distribución colapsada en uno o más ejes; comprobar si el modelo quedó como una lámina o una sola línea.');
+    }
+    if (axes[1].distinctCenters <= 2 && parts.length >= 8) {
+      issues.push('Poca variación vertical; comprobar niveles, alturas, soportes y volumen 3D.');
+    }
+    if (exactDuplicates) issues.push('Hay ' + exactDuplicates + ' pares de piezas con el mismo centro y tamaño.');
+    if (likelyAabbIntersections) issues.push('Hay ' + likelyAabbIntersections + ' pares de volúmenes AABB que se intersectan; distinguir uniones intencionales de colisiones accidentales.');
+    reports.push({
+      actionIndex,
+      name: cleanText(action.name, 60),
+      partCount: parts.length,
+      bounds: axes.map(axis => [Number(axis.min.toFixed(2)), Number(axis.max.toFixed(2))]),
+      distinctCenters: axes.map(axis => axis.distinctCenters),
+      exactDuplicatePairs: exactDuplicates,
+      intersectingAabbPairs: likelyAabbIntersections,
+      issues
+    });
+  }
+  return reports;
+}
+
 async function reviewConstructionDraft({ provider, model, apiKey, message, draft, history, signal }) {
   // Este revisor solo implementa los protocolos Gemini/OpenAI; evita llamar por error a Gemini con otra clave.
   if (provider !== 'openai' && provider !== 'gemini') return draft;
@@ -1472,8 +1541,10 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
   if (!isBuildTask || !needsReview) return draft;
 
   console.info('[ABX_DIAG] reviewer_start', JSON.stringify({ provider, model, draft: summarizeConstructionDraft(draft) }));
+  const geometryReport = analyzeStructureGeometry(actions);
   const reviewMessage = 'PETICIÓN ORIGINAL DEL USUARIO:\n' + message +
-    '\n\nBORRADOR QUE DEBES AUDITAR Y CORREGIR:\n' + JSON.stringify(draft);
+    '\n\nDIAGNÓSTICO GEOMÉTRICO CALCULADO A PARTIR DE LAS COORDENADAS REALES (las intersecciones pueden ser uniones intencionales):\n' + JSON.stringify(geometryReport) +
+    '\n\nBORRADOR QUE DEBES AUDITAR Y CORREGIR:\n' + JSON.stringify(draft)
   try {
     let response;
     let payload;
