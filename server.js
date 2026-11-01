@@ -1604,6 +1604,7 @@ async function createBuildBlueprint({ model, apiKey, message, history, signal, b
       .join('').trim();
     const plan = parseModelJson(output);
     if (!plan || typeof plan.objective !== 'string' ||
+        typeof plan.designBrief !== 'string' ||
         !Array.isArray(plan.requirements) || !Array.isArray(plan.acceptanceChecks)) {
       console.warn('[MEGA_PLAN] planner_invalid_output', JSON.stringify({ model, outputLength: output.length }));
       return '';
