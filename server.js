@@ -100,16 +100,23 @@ NIVEL 4 — CONSTRUCTOR PRO ABX BUILD
 Trata la petición como un resultado de Studio, no como una lista de nombres. Antes del JSON, organiza mentalmente objetivo y criterios de aceptación, jerarquía espacial/visual, dependencias, orden de acciones, conexiones funcionales y revisión final. En construcciones 3D define origen, escala, orientación, separación y puntos de unión; apoya edificios en el suelo, alinea paredes y techos, deja rutas transitables y evita piezas flotantes o duplicadas. En UI define propósito, jerarquía, layout, anclajes, tamaños, colores, estados, acciones de botones y feedback; no uses posiciones aleatorias ni mezcles UIListLayout con hijos posicionados manualmente. En scripts comprueba contexto servidor/cliente, rutas, eventos, validación, ciclo de vida y limpieza. Prioriza que todo quede conectado y bien montado, no solo que existan los objetos.
 `,
   'gemini-3.6-flash': `
-NIVEL 3 — CONSTRUCTOR EQUILIBRADO ABX BUILD
-Planea el orden de construcción antes de emitir acciones. Divide sistemas en servidor/cliente/módulos según corresponda; crea primero carpetas, valores y remotos requeridos. Para juegos, entrega un ciclo jugable conectado (inicio, acción principal, recompensa, UI y reinicio). Revisa mentalmente el contrato de cada acción y los enlaces entre scripts. Prioriza resultados completos, no solo objetos decorativos.
+NIVEL PROFESIONAL — CONSTRUCTOR GRATIS ABX BUILD
+Aunque este modelo sea gratuito, el resultado debe verse profesional en Roblox Studio. No entregues una fila de cubos, una caja cerrada ni una interfaz amontonada.
+Construcción: define origen, huella y altura. Una casa necesita suelo, paredes con hueco real de puerta, al menos dos ventanas en la fachada, techo por encima de las paredes y detalles de entrada. Usa normalmente 18 a 30 piezas con posiciones distintas. Una torre necesita pisos conectados. Un mapa u obby necesita recorrido, spawn y plataformas a alturas jugables.
+UI: ScreenGui en StarterGui, panel centrado con AnchorPoint [0.5,0.5], Position [0.5,0,0.5,0] y Size [0,440,0,540]. Separa título, contenido y botones. No pongas todo en 0,0 ni mezcles UIListLayout con Position manual.
+Scripts: servidor y cliente separados, rutas exactas y la función que el usuario pidió. Devuelve JSON completo, no un boceto.
 `,
   'gemini-3.1-flash-lite': `
-NIVEL 1 — ASISTENTE RÁPIDO ABX BUILD
-Resuelve rápido y directamente. Para cambios pequeños, usa el mínimo de acciones necesarias sin sacrificar funcionalidad. Comprueba nombres, rutas, tipos y dependencias; no agregues sistemas que no se pidieron.
+NIVEL PROFESIONAL — CONSTRUCTOR RÁPIDO ABX BUILD
+Responde sin rodeos, pero no reduzcas la calidad. Una petición de construir, diseñar o programar debe salir completa y reconocible.
+Prohibido: 3 a 8 bloques en fila, todas las piezas en la misma posición, una casa sin puerta o sin techo, botones encimados.
+Obligatorio en 3D: posiciones distintas, apoyos, huecos reales y silueta. En UI: panel centrado, márgenes y controles separados. En código: la lógica pedida, en el servicio correcto.
 `,
   'gemini-3.5-flash-lite': `
-NIVEL 2 — DESARROLLADOR PRÁCTICO ABX BUILD
-Interpreta el objetivo completo y anticipa dependencias. Para cada función conecta entrada, lógica, estado y resultado visible. Diseña UI adaptable, con jerarquía visual, restricciones de tamaño y feedback. En scripts, cubre inicialización, estados vacíos, errores y limpieza de eventos.
+NIVEL PROFESIONAL — DESARROLLADOR GRATIS ABX BUILD
+Interpreta el objetivo completo. No confundas rapidez con una solución pobre.
+En construcción calcula cada centro XYZ y cada tamaño. Las paredes forman un perímetro, la puerta queda abierta, las ventanas van en la fachada y el techo cubre. Usa materiales y una paleta corta a propósito.
+En UI alinea, deja margen y conecta los botones si se pidió función. En scripts cubre el flujo, los errores obvios y las rutas reales. Si falta una parte esencial y cabe en el esquema, inclúyela.
 `,
 
 
@@ -158,6 +165,17 @@ Trabaja como un desarrollador experto de Roblox Studio, aunque seas un modelo r�
 5) LUAU: usa APIs válidas de Roblox, rutas exactas, contexto correcto (servidor/cliente), eventos conectados, validación en servidor para operaciones sensibles, manejo de estados iniciales y limpieza de conexiones. No afirmes que una prueba fue ejecutada.
 6) JSON Y ESQUEMA: devuelve únicamente JSON válido con reply y actions. Cada acción debe cumplir el esquema permitido. Escapa correctamente strings y saltos de línea. Nunca agregues comentarios, Markdown ni propiedades inventadas. Si la petición es una pregunta, actions debe ser [].
 7) AUTORREVISIÓN: antes de responder, revisa integridad, dependencias, duplicados, errores de sintaxis evidentes, coherencia visual y si el resultado cumple la petición. Corrige los fallos detectados. Si el alcance excede los límites disponibles, prioriza una versión funcional y explícita lo que queda pendiente.
+8) RECHAZO DE CONSTRUCCIONES MALAS: una casa, tienda, torre, árbol, obby o mapa NO puede ser una fila de bloques, una sola caja o piezas repetidas en la misma línea. Si al ignorar los nombres no se reconoce la forma, rediseña las coordenadas antes de responder.
+9) RECETA MÍNIMA DE CASA: suelo, cuatro lados de pared con la puerta abierta entre dos segmentos, dos ventanas en la fachada, puerta, techo por encima y un detalle de entrada. Lo normal son 18 a 30 piezas, no 4.
+10) RECETA MÍNIMA DE UI: un panel centrado, título, zona de contenido y botones separados al menos 12 px, con texto legible y una paleta de 2 o 3 colores.
+`;
+
+const FREE_REVIEW_INSTRUCTION = `
+REVISIÓN OBLIGATORIA DE CALIDAD PARA MODELOS GRATIS
+Recibes la petición, un diagnóstico geométrico y un borrador JSON. Devuelve SOLO {"reply":"...","actions":[...]}.
+Si el diagnóstico dice distribución colapsada, pocos centros distintos, duplicados o menos de 12 piezas en una casa, edificio, tienda, torre, árbol, obby o mapa, NO conserves esas coordenadas. Reemplaza la estructura por un diseño reconocible: suelo, perímetro con puerta abierta, ventanas en la fachada, techo arriba y detalles. Las piezas deben ocupar X, Y y Z.
+Si la UI está amontonada, reconstruye un panel centrado con tamaños distintos y márgenes.
+Conserva la intención del usuario y solo usa acciones del esquema. No digas que ya se probó en Studio.
 `;
 
 const JSON_CONTRACT_INSTRUCTION = `
@@ -234,7 +252,7 @@ function taskProfile(message, buildMode) {
   if (game && professional) return { tier: 'professional', maxTokens: 16000, reasoning: 'high' };
   if (game) return { tier: 'game', maxTokens: 12000, reasoning: 'high' };
   if (professional || (build && connectedSystem)) return { tier: 'professional-system', maxTokens: 12000, reasoning: 'high' };
-  if (build) return { tier: 'construction', maxTokens: 8000, reasoning: 'high' };
+  if (build) return { tier: 'construction', maxTokens: 12000, reasoning: 'high' };
   return { tier: 'simple', maxTokens: 2200, reasoning: 'low' };
 }
 
@@ -1653,9 +1671,13 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
 
   console.info('[ABX_DIAG] reviewer_start', JSON.stringify({ provider, model, draft: summarizeConstructionDraft(draft) }));
   const geometryReport = analyzeStructureGeometry(actions);
+  const weakGeometry = geometryReport.some(report =>
+    (report.issues && report.issues.length) || (report.partCount && report.partCount < 12)
+  );
   const reviewMessage = 'PETICIÓN ORIGINAL DEL USUARIO:\n' + message +
     '\n\nDIAGNÓSTICO GEOMÉTRICO CALCULADO A PARTIR DE LAS COORDENADAS REALES (las intersecciones pueden ser uniones intencionales):\n' + JSON.stringify(geometryReport) +
-    '\n\nBORRADOR QUE DEBES AUDITAR Y CORREGIR:\n' + JSON.stringify(draft)
+    (weakGeometry ? '\n\nEL BORRADOR NO TIENE CALIDAD PROFESIONAL. Rehaz la geometría mala. No devuelvas la misma fila de bloques.' : '') +
+    '\n\nBORRADOR QUE DEBES AUDITAR Y CORREGIR:\n' + JSON.stringify(draft);
   try {
     let response;
     let payload;
@@ -1675,7 +1697,7 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
         },
         body: JSON.stringify({
           model,
-          instructions: SYSTEM_INSTRUCTION + '\\n\\n' + QUALITY_ENGINE_INSTRUCTION + '\\n\\n' + CONSTRUCTION_REVIEW_INSTRUCTION,
+          instructions: SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + '\n\n' + CONSTRUCTION_REVIEW_INSTRUCTION,
           input,
           text: { format: { type: 'json_object' } },
           max_output_tokens: CONFIG.maxOutputTokens
@@ -1712,7 +1734,7 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
           'x-goog-api-key': apiKey
         },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION + '\\n\\n' + QUALITY_ENGINE_INSTRUCTION + '\\n\\n' + CONSTRUCTION_REVIEW_INSTRUCTION }] },
+          systemInstruction: { parts: [{ text: (FREE_GEMINI_MODELS.has(model) ? FREE_MODEL_QUALITY_INSTRUCTION + '\n\n' + FREE_REVIEW_INSTRUCTION : SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + '\n\n' + CONSTRUCTION_REVIEW_INSTRUCTION) }] },
           contents: [{ role: 'user', parts: [{ text: reviewMessage }] }],
           generationConfig: {
             responseMimeType: 'application/json',
@@ -1876,7 +1898,11 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     });
   }
   const task = taskProfile(message, buildMode);
-  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + (FREE_GEMINI_MODELS.has(model) ? '\n\n' + FREE_MODEL_QUALITY_INSTRUCTION : '') + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\nPERFIL DE TAREA: ' + task.tier + '. Ajusta el alcance a este perfil y devuelve JSON inmediatamente cuando la tarea sea sencilla.\n\n' + UNIVERSAL_EXECUTION_STANDARD;
+  const freeBuild = FREE_GEMINI_MODELS.has(model) && task.tier !== 'simple';
+  const taskLine = freeBuild
+    ? 'PERFIL DE TAREA: ' + task.tier + '. Este modelo es gratis, pero la entrega debe verse profesional. No reduzcas una construcción a pocos bloques ni una interfaz a controles encimados. Usa posiciones, tamaños y jerarquía reales.'
+    : 'PERFIL DE TAREA: ' + task.tier + '. Ajusta el alcance a este perfil y devuelve JSON inmediatamente cuando la tarea sea sencilla.';
+  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\n' + taskLine + '\n\n' + UNIVERSAL_EXECUTION_STANDARD + (freeBuild ? '\n\n' + FREE_MODEL_QUALITY_INSTRUCTION : '');
 
   // Respect the selected provider: missing credentials are a clear configuration
   // error, rather than silently running a different provider than the user chose.
