@@ -1550,7 +1550,7 @@ async function createBuildBlueprint({ model, apiKey, message, history, signal, b
     'Prepara un plano de ejecución breve y concreto ANTES de que otro paso genere las acciones.',
     'No escribas código Luau ni acciones JSON finales. No inventes capacidades del plugin.',
     'Devuelve SOLO JSON válido con estas claves:',
-    '{"objective":"...","requirements":["..."],"architecture":["..."],"spatialPlan":["..."],"uiPlan":["..."],"scriptPlan":["..."],"dependencies":["..."],"risks":["..."],"acceptanceChecks":["..."],"scopeDecision":"..."}',
+    '{"objective":"...","designBrief":"...","requirements":["..."],"architecture":["..."],"spatialPlan":["..."],"gameplayLoop":["..."],"uiPlan":["..."],"scriptPlan":["..."],"dependencies":["..."],"performancePlan":["..."],"risks":["..."],"acceptanceChecks":["..."],"testPlan":["..."],"scopeDecision":"..."}',
     'REGLAS:',
     '- Extrae requisitos explícitos e implícitos necesarios para cumplir la petición sin añadir funciones irrelevantes.',
     '- Construcción física: define origen, escala, límites, distribución XYZ, alturas, apoyos, huecos, profundidad, recorridos y orden de montaje.',
