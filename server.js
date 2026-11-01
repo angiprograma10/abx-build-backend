@@ -1552,11 +1552,14 @@ async function createBuildBlueprint({ model, apiKey, message, history, signal, b
     'Devuelve SOLO JSON válido con estas claves:',
     '{"objective":"...","designBrief":"...","requirements":["..."],"architecture":["..."],"spatialPlan":["..."],"gameplayLoop":["..."],"uiPlan":["..."],"scriptPlan":["..."],"dependencies":["..."],"performancePlan":["..."],"risks":["..."],"acceptanceChecks":["..."],"testPlan":["..."],"scopeDecision":"..."}',
     'REGLAS:',
+    '- Define primero una dirección de diseño propia: identidad del proyecto, estilo visual, silueta, paleta, escala y elementos que lo harán reconocible. No uses una plantilla universal.',
     '- Extrae requisitos explícitos e implícitos necesarios para cumplir la petición sin añadir funciones irrelevantes.',
     '- Construcción física: define origen, escala, límites, distribución XYZ, alturas, apoyos, huecos, profundidad, recorridos y orden de montaje.',
     '- UI: define jerarquía, contenedores, tamaños/posiciones UDim2, márgenes, contraste, estados y qué controles necesitan comportamiento.',
     '- Scripts: asigna cada responsabilidad a servidor o cliente, define rutas exactas, nombres compartidos, dependencias, eventos, validación y limpieza.',
-    '- Sistemas: conecta entrada del jugador, reglas, estado, feedback, recompensa y reinicio cuando correspondan.',
+    '- Sistemas: conecta entrada del jugador, reglas, estado, feedback, recompensa y reinicio cuando correspondan. Describe el bucle jugable completo en gameplayLoop.',
+    '- Añade performancePlan con riesgos reales de rendimiento y mitigaciones compatibles.',
+    '- Añade testPlan con comprobaciones manuales concretas para Studio; no afirmes que ya se ejecutaron.',
     '- Identifica qué puede hacerse realmente con las acciones permitidas: CREATE_PART, CREATE_STRUCTURE, CREATE_TREE, CREATE_SCRIPT, CREATE_FOLDER, CREATE_VALUE, CREATE_REMOTE, CREATE_OBJECT, CREATE_SYSTEM, SET_PROPERTIES y acciones de inspección/edición admitidas.',
     '- Respeta límites: máximo 30 acciones por plan, 60 piezas por CREATE_STRUCTURE, 300 nodos por árbol y 10000 caracteres por script.',
     '- No reduzcas una construcción compleja a una fila de bloques. Tampoco aumentes piezas sin propósito.',
@@ -1607,14 +1610,18 @@ async function createBuildBlueprint({ model, apiKey, message, history, signal, b
     }
     const bounded = {
       objective: cleanText(plan.objective, 500),
+      designBrief: cleanText(plan.designBrief, 700),
       requirements: plan.requirements.slice(0, 14).map(item => cleanText(item, 240)).filter(Boolean),
       architecture: Array.isArray(plan.architecture) ? plan.architecture.slice(0, 12).map(item => cleanText(item, 240)).filter(Boolean) : [],
       spatialPlan: Array.isArray(plan.spatialPlan) ? plan.spatialPlan.slice(0, 16).map(item => cleanText(item, 240)).filter(Boolean) : [],
       uiPlan: Array.isArray(plan.uiPlan) ? plan.uiPlan.slice(0, 12).map(item => cleanText(item, 240)).filter(Boolean) : [],
+      gameplayLoop: Array.isArray(plan.gameplayLoop) ? plan.gameplayLoop.slice(0, 12).map(item => cleanText(item, 240)).filter(Boolean) : [],
       scriptPlan: Array.isArray(plan.scriptPlan) ? plan.scriptPlan.slice(0, 12).map(item => cleanText(item, 240)).filter(Boolean) : [],
       dependencies: Array.isArray(plan.dependencies) ? plan.dependencies.slice(0, 14).map(item => cleanText(item, 240)).filter(Boolean) : [],
+      performancePlan: Array.isArray(plan.performancePlan) ? plan.performancePlan.slice(0, 10).map(item => cleanText(item, 220)).filter(Boolean) : [],
       risks: Array.isArray(plan.risks) ? plan.risks.slice(0, 10).map(item => cleanText(item, 200)).filter(Boolean) : [],
       acceptanceChecks: plan.acceptanceChecks.slice(0, 14).map(item => cleanText(item, 240)).filter(Boolean),
+      testPlan: Array.isArray(plan.testPlan) ? plan.testPlan.slice(0, 12).map(item => cleanText(item, 220)).filter(Boolean) : [],
       scopeDecision: cleanText(plan.scopeDecision, 500)
     };
     const serialized = JSON.stringify(bounded);
