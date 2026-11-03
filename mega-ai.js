@@ -11,7 +11,7 @@ const MEGA_ROLES = Object.freeze({
       'Ordena las tareas por dependencias. Cada tarea debe tener un objetivo concreto, entregables y contexto suficiente.',
       'No generes acciones de Roblox en esta fase. Devuelve solo JSON: {"reply":"resumen breve","projectBrief":"contexto compartido","tasks":[{"specialist":"mega-build","task":"objetivo concreto","dependsOn":[]}]}',
       'Si la petición es una pregunta o no necesita varios especialistas, devuelve tasks:[] y responde brevemente en reply.',
-      'Máximo 5 tareas. Utiliza nombres exactos: mega-build, mega-scripting, mega-ui, mega-fx, mega-gameplay.'
+      'Máximo 5 tareas. Cada tarea debe ser ejecutable sin adivinar e incluir entregables y criterios de aceptación. Utiliza nombres exactos: mega-build, mega-scripting, mega-ui, mega-fx, mega-gameplay.'
     ]
   },
   'mega-build': {
@@ -789,7 +789,7 @@ async function generateMegaResponse({
     ? systemInstruction + '\n\nPERFIL DE BOT ' + tier.name.toUpperCase() + ':\n' +
       tier.instruction + '\nLímite de especialistas coordinados: ' + taskLimit +
       '. Límite de acciones del plan: ' + actionLimit +
-      '. Prioriza una entrega completa y concreta, con explicaciones breves. Todas las especialidades MEGA están disponibles internamente; selecciona solo las que realmente aporten.'
+      '. Prioriza una entrega completa y concreta, con explicaciones breves. Todas las especialidades MEGA están disponibles internamente; selecciona solo las que realmente aporten. Exige criterios de aceptación verificables, conserva un contrato compartido de nombres y rutas, y revisa la coherencia antes de devolver el resultado.'
     : systemInstruction;
 
   let tasks;
@@ -805,8 +805,8 @@ async function generateMegaResponse({
       ...normalizedHistory,
       {
         role: 'user',
-        content: 'Analiza esta solicitud como director de un equipo de especialistas Roblox. ' +
-          'No generes acciones todavía. Devuelve SOLO JSON con {"reply":"...","projectBrief":"...","tasks":[{"specialist":"mega-build","task":"...","dependsOn":[]}]}.' +
+        content: 'Analiza esta solicitud como director técnico de un equipo Roblox. ' +
+          'No generes acciones todavía. Devuelve SOLO JSON con {"reply":"...","projectBrief":"...","tasks":[{"specialist":"mega-build","task":"objetivo, entregables y criterios de aceptación","dependsOn":[]}]}.' +
           '\n\nPETICIÓN:\n' + message +
           '\n\nMODO:\n' + (buildMode === 'full-game'
             ? 'Juego completo: reúne las especialidades necesarias para un MVP coherente.'
@@ -885,7 +885,7 @@ async function generateMegaResponse({
         'TAREA ASIGNADA A ' + task.specialist.toUpperCase() + ':\n' + task.task,
         task.dependsOn.length ? 'DEPENDENCIAS DECLARADAS: ' + task.dependsOn.join(', ') : '',
         previousContext.length ? 'ENTREGAS ANTERIORES DE OTROS ESPECIALISTAS:\n' + JSON.stringify(previousContext).slice(0, 10000) : '',
-        'BLOQUEO DE ALCANCE: implementa solo los requisitos explícitos y el soporte mínimo indispensable; no inventes extras. No cambies el comportamiento normal del jugador si no se pidió. Conserva exactamente los nombres y rutas compartidos.'
+        'PROTOCOLO DE ENTREGA: convierte cada requisito asignado en acciones reales. Comprueba entradas, salidas, dependencias, nombres y rutas. En 3D verifica escala, apoyos, alineación y espacios libres; en UI verifica jerarquía, márgenes, contraste y estados; en Luau verifica APIs, contexto, validación, eventos y ciclo de vida. BLOQUEO DE ALCANCE: implementa solo requisitos explícitos y soporte mínimo indispensable; no inventes extras. No cambies el comportamiento normal del jugador si no se pidió. Conserva exactamente los nombres y rutas compartidos.'
       ].filter(Boolean).join('\n\n');
 
       const generated = await callMegaModel({
@@ -938,7 +938,7 @@ async function generateMegaResponse({
   // One concise but rigorous integration audit is faster than repeated model rounds.
   const qaPasses = fastSpecialist && tier && tier.id === 'mega-lite'
     ? 0
-    : (tier ? Math.min(1, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
+    : (tier ? Math.min(2, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
   for (let pass = 0; pass < qaPasses && finalParsed.actions.length; pass++) {
     const passPrompt = 'AUDITORÍA FINAL INTEGRAL: comprueba dependencias, rutas, nombres, compatibilidad, fidelidad exacta a la petición, colores visuales y funcionalidad. Corrige solo defectos concretos. Elimina extras no solicitados. Devuelve las acciones completas, no una explicación.';
     const reviewed = await callMegaModel({
