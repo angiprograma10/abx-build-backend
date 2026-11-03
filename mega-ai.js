@@ -985,13 +985,6 @@ async function generateMegaResponse({
 
     batchResults.sort((a, b) => a.index - b.index);
     for (const result of batchResults) {
-      if (result.actions.length > actionLimit ||
-          results.reduce((total, item) => total + item.actions.length, 0) + result.actions.length > actionLimit) {
-        const error = new Error('MEGA no pudo integrar todas las acciones dentro del límite técnico disponible después de la coordinación interna.');
-        error.code = 'MEGA_ACTION_LIMIT';
-        error.httpStatus = 422;
-        throw error;
-      }
       results.push(result);
       completedSpecialists.add(result.specialist);
       const pendingIndex = pending.findIndex(item => item.index === result.index);
@@ -1000,7 +993,37 @@ async function generateMegaResponse({
   }
 
   results.sort((a, b) => a.index - b.index);
-  const combinedActions = results.flatMap(result => result.actions);
+  let combinedActions = results.flatMap(result => result.actions);
+  let compactedReply = '';
+  if (combinedActions.length > actionLimit) {
+    // MEGA internally consolidates oversized specialist deliveries before exposing an error.
+    try {
+      const compacted = await callMegaModel({
+        roleId: 'qa',
+        messages: specialistMessages('qa', tierSystemInstruction, message,
+          'INTEGRACIÓN INTERNA OBLIGATORIA: el conjunto de especialistas produjo ' + combinedActions.length +
+          ' acciones y el límite de esta solicitud es ' + actionLimit + '. Devuelve una versión completa con como máximo ' +
+          actionLimit + ' acciones. Conserva todos los requisitos funcionales y visuales explícitos. Consolida piezas físicas compatibles en CREATE_MODEL_BLUEPRINT o CREATE_STRUCTURE; agrupa jerarquías compatibles en CREATE_TREE; elimina únicamente redundancias demostrables. No elimines sistemas, scripts ni comportamientos necesarios para alcanzar el límite. No pidas al usuario dividir la petición.\nACCIONES ACTUALES:\n' + JSON.stringify(combinedActions),
+          normalizedHistory),
+        signal,
+        maxTokens: tier ? Math.max(tier.qaTokens, 5000) : 6000,
+        temperature: 0.05,
+        tierId: tier ? tier.id : 'default'
+      });
+      if (Array.isArray(compacted.parsed.actions) && compacted.parsed.actions.length <= actionLimit) {
+        combinedActions = compacted.parsed.actions;
+        compactedReply = typeof compacted.parsed.reply === 'string' ? compacted.parsed.reply.slice(0, 1200) : '';
+      }
+    } catch (error) {
+      console.warn('[MEGA_AI] internal_action_compaction_failed', error && error.code ? error.code : 'unknown');
+    }
+    if (combinedActions.length > actionLimit) {
+      const error = new Error('MEGA no pudo integrar todas las acciones dentro del límite técnico disponible después de la compactación interna.');
+      error.code = 'MEGA_ACTION_LIMIT';
+      error.httpStatus = 422;
+      throw error;
+    }
+  }
   const reviewContext = [
     projectBrief ? 'RESUMEN DEL PROYECTO:\n' + projectBrief : '',
     'ENTREGAS DE ESPECIALISTAS:\n' + JSON.stringify(results).slice(0, 22000),
@@ -1008,7 +1031,7 @@ async function generateMegaResponse({
   ].filter(Boolean).join('\n\n');
 
   let finalParsed = {
-    reply: reply || results.map(result => result.reply).filter(Boolean).join(' '),
+    reply: compactedReply || reply || results.map(result => result.reply).filter(Boolean).join(' '),
     actions: combinedActions
   };
 
