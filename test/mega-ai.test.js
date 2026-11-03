@@ -619,7 +619,7 @@ test('uses the fast lane for long single-domain build requests without an extra 
   try {
     const result = await mega.generateMegaResponse({
       selectedModel: 'mega-lite-2',
-      message: 'Construye una casa moderna detallada con paredes, ventanas, techo y materiales distintos. '.repeat(3),
+      message: 'Construye un terreno de prueba con dimensiones y superficie bien definidas. '.repeat(3),
       history: [],
       buildMode: 'standard',
       systemInstruction: 'Test',
