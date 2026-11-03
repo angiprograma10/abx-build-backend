@@ -591,6 +591,54 @@ test('repairs malformed and incomplete model output before returning MEGA action
   }
 });
 
+
+test('uses the fast lane for long single-domain build requests without an extra QA round trip', async () => {
+  const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
+  const oldModel = process.env.MEGA_BOOTSTRAP_MODEL;
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'test-model';
+  let calls = 0;
+  global.fetch = async (_url, options) => {
+    calls++;
+    const body = JSON.parse(options.body);
+    assert.match(body.contents.at(-1).parts[0].text, /TAREA ASIGNADA A MEGA-BUILD/i);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({
+          reply: 'Construcción detallada preparada.',
+          actions: [{ type: 'CREATE_PART', name: 'Base', color: 'Dark stone grey' }]
+        }) }] } }]
+      })
+    };
+  };
+  try {
+    const result = await mega.generateMegaResponse({
+      selectedModel: 'mega-lite-2',
+      message: 'Construye una casa moderna detallada con paredes, ventanas, techo y materiales distintos. '.repeat(3),
+      history: [],
+      buildMode: 'standard',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+    assert.equal(calls, 1, 'single-domain fast lane should avoid director and QA model calls');
+    assert.equal(result.actions.length, 1);
+    assert.equal(result.agentTrace[0].specialist, 'mega-build');
+  } finally {
+    global.fetch = oldFetch;
+    if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
+    else process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL;
+    else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
+  }
+});
+
 test('uses a user-friendly failure after all structured-output repairs are exhausted', async () => {
   const oldUrl = process.env.MEGA_INFERENCE_URL;
   const oldKey = process.env.GEMINI_API_KEY;
