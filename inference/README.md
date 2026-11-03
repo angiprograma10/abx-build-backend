@@ -12,6 +12,12 @@ Este servicio carga un modelo abierto en hardware GPU administrado por el proyec
 
 Fuente oficial: https://huggingface.co/Qwen/Qwen3.5-4B
 
+## Modo temporal mientras no hay GPU
+
+Si `MEGA_INFERENCE_URL` todavía no está configurada pero `GEMINI_API_KEY` sí existe en Render, el backend puede ejecutar los prompts de cada especialista mediante ese motor temporal. La página sigue mostrando exclusivamente los cinco nombres MEGA y no expone el proveedor en el selector ni en la etiqueta de respuesta.
+
+Este modo permite probar la orquestación y los contratos de acciones sin servidor GPU. **No convierte el modelo base en pesos propios ni significa que los adaptadores LoRA estén entrenados.** Cuando se configure `MEGA_INFERENCE_URL`, la inferencia pasa al servidor propio y deja de usar el modo temporal.
+
 ## Requisitos previos
 
 1. Un equipo/servidor Linux con GPU NVIDIA compatible con la versión de CUDA/PyTorch de vLLM.
