@@ -1991,9 +1991,9 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   const controller = new AbortController();
   const megaTimeouts = {
     'mega-lite': 60 * 1000,
-    'mega-lite-2': 75 * 1000,
-    'mega-lite-3-5': 110 * 1000,
-    'mega-go': 150 * 1000,
+    'mega-lite-2': 90 * 1000,
+    'mega-lite-3-5': 125 * 1000,
+    'mega-go': 165 * 1000,
     'mega-max': 180 * 1000
   };
   const requestTimeout = selectedProvider === 'mega'
