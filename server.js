@@ -3,7 +3,7 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
-const { isMegaModel, getMegaCatalog, getMegaStatus, generateMegaResponse } = require('./mega-ai');
+const { isMegaModel, isPaidMegaTier, getMegaCatalog, getMegaStatus, generateMegaResponse } = require('./mega-ai');
 
 const app = express();
 app.disable('x-powered-by');
@@ -1898,6 +1898,14 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     : (ALLOWED_MODELS.has(envModel) ? envModel
       : 'gemini-3.5-flash-lite');
   const selectedProvider = providerForModel(model);
+  // GO and MAX stay locked until a real server-verified subscription system exists.
+  if (selectedProvider === 'mega' && isPaidMegaTier(model)) {
+    return res.status(403).json({
+      ok: false,
+      code: 'MEGA_SUBSCRIPTION_REQUIRED',
+      error: 'MEGA GO y MEGA MAX requieren un plan de paga. La verificación de suscripciones todavía no está activada.'
+    });
+  }
   const requestedTokenCost = ({ 'gemini-3.8-flash': 2, 'gemini-3.1-pro-preview': 3 })[model] || 0;
   if (tokenState.remaining < requestedTokenCost) {
     return res.status(429).json({
