@@ -22,9 +22,9 @@ test('recognizes each MEGA specialist identifier', () => {
 
 test('publishes five MEGA specialists and hides internal inference credentials', () => {
   const oldUrl = process.env.MEGA_INFERENCE_URL;
-  const oldKey = process.env.MEGA_INFERENCE_API_KEY;
+  const oldKey = process.env.GEMINI_API_KEY;
   delete process.env.MEGA_INFERENCE_URL;
-  process.env.MEGA_INFERENCE_API_KEY = 'test-secret-that-must-not-be-returned';
+  process.env.GEMINI_API_KEY = 'test-secret-that-must-not-be-returned';
   try {
     const status = mega.getMegaStatus();
     const catalog = mega.getMegaCatalog();
@@ -48,8 +48,8 @@ test('publishes five MEGA specialists and hides internal inference credentials',
   } finally {
     if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
     else process.env.MEGA_INFERENCE_URL = oldUrl;
-    if (oldKey === undefined) delete process.env.MEGA_INFERENCE_API_KEY;
-    else process.env.MEGA_INFERENCE_API_KEY = oldKey;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldKey;
   }
 });
 
