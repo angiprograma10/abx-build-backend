@@ -1049,6 +1049,18 @@ async function generateMegaResponse({
     }
   }
 
+  if (geometryDefects) {
+    const remainingGeometryReport = finalParsed.actions.length
+      ? analyzeActionGeometry(finalParsed.actions, message)
+      : [{ issues: ['La revisión eliminó la construcción y no dejó un modelo 3D.'] }];
+    if (remainingGeometryReport.some(report => report.issues && report.issues.length)) {
+      const error = new Error('MEGA no pudo corregir la geometría de esta construcción con suficiente confianza. No se enviará un modelo defectuoso a Roblox Studio.');
+      error.code = 'MEGA_GEOMETRY_QUALITY_FAILED';
+      error.httpStatus = 422;
+      throw error;
+    }
+  }
+
   if (!Array.isArray(finalParsed.actions) || finalParsed.actions.length > actionLimit) {
     const error = new Error('El plan integrado de MEGA no cabe en los límites de este nivel. No se enviará al plugin.');
     error.code = 'MEGA_INVALID_PLAN';
