@@ -764,7 +764,7 @@ function inferFastSpecialist(message) {
 }
 
 function isComplexGeometryRequest(message) {
-  return /\b(casa|vivienda|edificio|castillo|estadio|ciudad|torre|puente|escuela|hospital|tienda|granja|mansión|mansion|mapa|obby|base|interior)\b/i.test(String(message || ''));
+  return /\b(casa|vivienda|edificio|castillo|estadio|ciudad|torre|puente|escuela|hospital|tienda|granja|mansión|mansion|mapa|obby)\b/i.test(String(message || ''));
 }
 
 function analyzeActionGeometry(actions, message) {
