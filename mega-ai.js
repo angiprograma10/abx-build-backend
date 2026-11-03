@@ -170,6 +170,16 @@ const SPECIALIST_IDS = Object.freeze([
 ]);
 
 
+const MEGA_MODEL_ENGINEERING_RULES = [
+  'RAZONAMIENTO DE INGENIERÍA: analiza silenciosamente el objetivo, el estado conocido del proyecto, las restricciones, las dependencias y los criterios de aceptación antes de generar. No expongas razonamiento interno paso a paso; entrega decisiones, código y acciones verificables.',
+  'PRECISIÓN SOBRE VOLUMEN: no confundas calidad con longitud. Evita explicaciones repetidas, planes narrativos innecesarios, acciones redundantes y objetos decorativos no solicitados. Usa el presupuesto de salida para la solución funcional.',
+  'CONTRATO ENTRE ESPECIALISTAS: utiliza nombres exactos, rutas completas, clases de Roblox y nombres de eventos consistentes. Si dependes de otro especialista, declara el contrato mínimo necesario en el contexto o en los nombres de las acciones; no inventes que su trabajo ya existe.',
+  'ROBLOX REAL, NO PSEUDOCÓDIGO: utiliza APIs reales de Roblox/Luau y el esquema de acciones realmente admitido por el plugin. Si una API, propiedad, clase o capacidad no está confirmada, no la inventes.',
+  'ROBUSTEZ: contempla inicialización tardía, respawn del personaje, múltiples jugadores, eventos duplicados, valores nil y limpieza de conexiones cuando sean relevantes para la tarea. No agregues complejidad que no corresponda.',
+  'UNA PASADA BIEN PREPARADA: resuelve la tarea asignada de forma completa en la primera respuesta. No generes una segunda auditoría de IA para tareas de un solo especialista; la validación determinista del backend/plugin debe detectar límites y estructura.',
+  'RESPUESTA EFICIENTE: devuelve JSON válido inmediatamente. reply debe ser breve y útil. No incluyas introducciones, disculpas, comentarios sobre tu proceso ni texto fuera del JSON.'
+];
+
 const MEGA_INTENT_AND_VISUAL_RULES = [
   'FIDELIDAD A LA PETICIÓN: cumple exactamente lo que pidió el usuario. No agregues mecánicas, objetos, sistemas, obstáculos, decoraciones, escenarios, recompensas, animaciones ni efectos que no haya solicitado.',
   'Separa mentalmente: (1) requisitos explícitos del usuario; (2) elementos de soporte estrictamente necesarios para que esos requisitos funcionen; (3) extras opcionales. Implementa solo (1) y el mínimo indispensable de (2). La categoría (3) siempre queda fuera, aunque sea común en ese género de juego.',
@@ -393,7 +403,7 @@ function normalizeHistory(history) {
 }
 
 function roleSystemPrompt(roleId, sharedSystemInstruction) {
-  const common = MEGA_INTENT_AND_VISUAL_RULES.join('\n');
+  const common = MEGA_MODEL_ENGINEERING_RULES.join('\n') + '\n' + MEGA_INTENT_AND_VISUAL_RULES.join('\n');
   if (roleId === 'qa') return sharedSystemInstruction + '\n\n' + common + '\n\n' + QA_INSTRUCTIONS;
   const role = MEGA_ROLES[roleId];
   return sharedSystemInstruction + '\n\n' + common + '\n\n' + role.instructions.join('\n');
@@ -936,7 +946,10 @@ async function generateMegaResponse({
   };
 
   // One concise but rigorous integration audit is faster than repeated model rounds.
-  const qaPasses = fastSpecialist && tier && tier.id === 'mega-lite'
+  // A single-domain specialist already receives the full engineering contract.
+  // A second LLM round trip adds latency without adding independent expertise;
+  // reserve model-based QA for coordinated multi-specialist plans.
+  const qaPasses = fastSpecialist
     ? 0
     : (tier ? Math.min(1, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
   for (let pass = 0; pass < qaPasses && finalParsed.actions.length; pass++) {
