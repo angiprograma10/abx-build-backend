@@ -447,15 +447,16 @@ function getBootstrapModelCandidates(tierId) {
   const primary = String(
     process.env[profile.env] ||
     process.env.MEGA_BOOTSTRAP_MODEL ||
-    process.env.GEMINI_MODEL ||
-    profile.models[0]
+    profile.models[0] ||
+    process.env.GEMINI_MODEL
   ).trim();
   const configuredFallbacks = String(process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS || '')
     .split(/[;,]/)
     .map(value => value.trim())
     .filter(Boolean);
   const fallbacks = configuredFallbacks.length ? configuredFallbacks : profile.models;
-  const preferred = preferredBootstrapModels.get(tierId || 'default');
+  const preferredKey = (tierId || 'default') + '|' + primary + '|' + fallbacks.join(',');
+  const preferred = preferredBootstrapModels.get(preferredKey);
   const candidates = [...new Set([primary, ...fallbacks].filter(Boolean))].slice(0, 5);
   if (preferred && candidates.includes(preferred)) {
     return [preferred, ...candidates.filter(candidate => candidate !== preferred)];
@@ -617,7 +618,11 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
             const payload = await response.json().catch(() => ({}));
             if (response.ok) {
               activeModel = candidateModel;
-              preferredBootstrapModels.set(tierId || 'default', candidateModel);
+              const preferredCacheKey = (tierId || 'default') + '|' +
+                String(models[0] || '') + '|' +
+                String(process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS || '')
+                  .split(/[;,]/).map(value => value.trim()).filter(Boolean).join(',');
+              preferredBootstrapModels.set(preferredCacheKey, candidateModel);
               return payload?.candidates?.[0]?.content?.parts
                 ?.map(part => typeof part.text === 'string' ? part.text : '')
                 .join('') || '';
@@ -934,7 +939,9 @@ async function generateMegaResponse({
   };
 
   // One concise but rigorous integration audit is faster than repeated model rounds.
-  const qaPasses = fastSpecialist ? 0 : (tier ? Math.min(1, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
+  const qaPasses = fastSpecialist && tier && tier.id === 'mega-lite'
+    ? 0
+    : (tier ? Math.min(1, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
   for (let pass = 0; pass < qaPasses && finalParsed.actions.length; pass++) {
     const passPrompt = 'AUDITORÍA FINAL INTEGRAL: comprueba dependencias, rutas, nombres, compatibilidad, fidelidad exacta a la petición, colores visuales y funcionalidad. Corrige solo defectos concretos. Elimina extras no solicitados. Devuelve las acciones completas, no una explicación.';
     const reviewed = await callMegaModel({
