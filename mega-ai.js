@@ -53,11 +53,11 @@ const MEGA_ROLES = Object.freeze({
     ]
   },
   'mega-fx': {
-    name: 'MEGA FX',
+    name: 'MEGA VFX',
     specialty: 'efectos visuales, iluminación, partículas y ambiente',
     env: 'MEGA_FX_MODEL',
     instructions: [
-      'Eres MEGA FX, especialista en efectos visuales de Roblox Studio.',
+      'Eres MEGA VFX, especialista en efectos visuales de Roblox Studio.',
       'Diseña una identidad visual coherente mediante iluminación, Atmosphere, Bloom, ColorCorrection, ParticleEmitter, Beam, Trail, Highlight y efectos admitidos.',
       'Asocia cada efecto a un objeto, evento o ubicación concreta. Define color, intensidad, duración y condiciones de activación cuando la propiedad esté soportada.',
       'No inventes IDs de texturas, sonidos, meshes ni assets externos. No sustituyas mecánicas por efectos visuales.',
@@ -65,11 +65,11 @@ const MEGA_ROLES = Object.freeze({
     ]
   },
   'mega-gameplay': {
-    name: 'MEGA GAMEPLAY',
+    name: 'MEGA JUEGO',
     specialty: 'mecánicas, reglas, progresión y experiencia del jugador',
     env: 'MEGA_GAMEPLAY_MODEL',
     instructions: [
-      'Eres MEGA GAMEPLAY, diseñador de sistemas y experiencia jugable para Roblox.',
+      'Eres MEGA JUEGO, diseñador de sistemas y experiencia jugable para Roblox.',
       'Define el bucle de juego: inicio, objetivo, acción del jugador, reglas, estado, feedback, éxito/fracaso, recompensa y reinicio.',
       'Anticipa casos límite, multijugador, concurrencia, exploits, balance y persistencia solo cuando se solicite y las capacidades existan.',
       'Coordina nombres de objetos, eventos, valores y contratos para los otros especialistas. No inventes objetos ya construidos.',
@@ -114,18 +114,16 @@ function getRoleModel(modelId) {
 
 function getMegaCatalog() {
   const configured = Boolean(getMegaEndpoint());
-  return [
-    {
-      id: 'mega-director',
-      provider: 'mega',
-      name: 'MEGA AI · Director',
-      note: 'Coordina especialistas y proyectos completos',
-      tier: 'mega',
-      available: configured,
-      inferenceModel: getRoleModel('mega-director'),
-      trainedAdapter: getRoleModel('mega-director') !== getMegaBaseModel()
-    },
-    ...Object.entries(MEGA_ROLES).filter(([id]) => id !== 'mega-director').map(([id, role]) => ({
+  const publicSpecialists = [
+    'mega-scripting',
+    'mega-build',
+    'mega-fx',
+    'mega-ui',
+    'mega-gameplay'
+  ];
+  return publicSpecialists.map(id => {
+    const role = MEGA_ROLES[id];
+    return {
       id,
       provider: 'mega',
       name: role.name,
@@ -134,8 +132,8 @@ function getMegaCatalog() {
       available: configured,
       inferenceModel: getRoleModel(id),
       trainedAdapter: getRoleModel(id) !== getMegaBaseModel()
-    }))
-  ];
+    };
+  });
 }
 
 function getMegaStatus() {
