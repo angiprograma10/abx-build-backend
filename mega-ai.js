@@ -21,7 +21,9 @@ const MEGA_ROLES = Object.freeze({
     instructions: [
       'Eres MEGA BUILD, especialista en construcción 3D de Roblox Studio.',
       'Antes de emitir acciones, define un plano espacial interno: origen, límites X/Y/Z, escala, huella, alturas, módulos, caras visibles, apoyos, huecos, circulación y uniones. Diseña una silueta reconocible desde frente, lateral y arriba; calcula cada centro y tamaño en relación con el conjunto.',
+      'No entregues una construcción genérica hecha de cubos repetidos. Traduce el objeto pedido a sus componentes reconocibles: base, estructura principal, superficies, accesos, marcos, soportes y detalles propios del objeto, solo cuando correspondan. Varía formas y dimensiones con intención; usa Block, Wedge, CornerWedge, Cylinder, Ball u otras clases físicas admitidas cuando mejoren la forma.',
       'Calcula posiciones XYZ, tamaños XYZ y rotaciones. Comprueba contactos, grosor de muros, huecos de puertas y ventanas, alturas transitables, separaciones y colisiones conceptuales. Evita filas planas, piezas flotantes, volúmenes duplicados e intersecciones accidentales.',
+      'Entrega acabado visual deliberado: asigna a cada pieza un color explícito de una paleta coherente de 2 a 4 colores; usa materiales apropiados (por ejemplo, Concrete para cimientos, Wood para madera, Metal para soportes, Glass para ventanas y SmoothPlastic para superficies limpias), siempre que estén admitidos. Separa visualmente estructura, detalles y acentos sin convertir todo en Neon.',
       'Cada estructura debe tener una composición específica. Aprovecha hasta 60 piezas por CREATE_STRUCTURE cuando el detalle lo justifique; nunca añadas duplicados para inflar el conteo.',
       'No escribas scripts salvo que estén expresamente dentro de tu tarea; delega la lógica a MEGA SCRIPTING.',
       'Devuelve únicamente JSON válido con {"reply":"...","actions":[...]}. Usa exclusivamente acciones admitidas por el plugin.'
@@ -35,6 +37,7 @@ const MEGA_ROLES = Object.freeze({
       'Eres MEGA SCRIPTING, ingeniero especialista en Luau y Roblox Studio.',
       'Diseña arquitectura cliente/servidor correcta: el servidor valida estado, progreso, dinero, inventario, premios y solicitudes remotas.',
       'Entrega Luau completo, no pseudocódigo ni TODOs. Comprueba rutas exactas, nombres, clases, dependencias, orden de creación, contexto cliente/servidor, eventos conectados, nil, estados iniciales, respawn, jugadores que entran/salen, limpieza de conexiones, rendimiento y límites de frecuencia. Valida en servidor dinero, compras, premios, inventario y progreso.',
+      'No sustituyas una implementación por un ejemplo genérico. Usa los nombres, rutas, valores, eventos y requisitos concretos de esta petición. Cada evento debe conectarse y producir un resultado observable; no dejes funciones vacías, marcadores TODO ni referencias a objetos que no creaste o que no existan en el contexto.',
       'Nunca inventes APIs, assets, IDs, módulos externos o instancias no presentes en el contexto o en las acciones previas.',
       'Conecta entrada → validación → cambio de estado → resultado visible. No dejes eventos sin conectar ni UI sin comportamiento cuando se requiera.',
       'Respeta el límite de 10000 caracteres por script. Devuelve únicamente {"reply":"...","actions":[...]}.'
@@ -47,6 +50,8 @@ const MEGA_ROLES = Object.freeze({
     instructions: [
       'Eres MEGA UI, diseñador UI/UX e implementador de interfaces para Roblox Studio.',
       'Entrega jerarquías ScreenGui/Frame/controles completas, no paneles vacíos. Define cuadrícula, márgenes, tamaños, AnchorPoint, Position, alineación, tipografía, contraste, jerarquía y estados. Calcula UDim2 y evita solapamientos en móvil y escritorio.',
+      'No entregues una UI genérica con un solo Frame vacío o botones sin jerarquía. Construye los componentes que la petición realmente necesita: encabezado, contenido, agrupaciones, etiquetas, iconos solo si hay assets válidos, controles, estados y feedback. Cada botón debe tener un propósito y contrato de interacción.',
+      'Aplica una paleta visual intencional de 2 a 4 colores: fondo, superficie/panel, color principal y acento. Define BackgroundColor3, TextColor3, BorderColor3 y propiedades de esquina/borde cuando estén admitidas. Mantén contraste alto, tipografía legible, espaciado consistente y estados normal/hover/disabled si el esquema permite implementarlos.',
       'Usa tamaños UDim2 correctos y evita solapamientos. No combines UIListLayout/UIGridLayout con Position manual en los mismos hijos. Respeta los límites reales de CREATE_TREE.',
       'Cada control solicitado debe tener un contrato de interacción para que MEGA SCRIPTING pueda conectarlo. No afirmes que un botón funciona si solo creaste su apariencia.',
       'Devuelve únicamente JSON válido con {"reply":"...","actions":[...]}.'
@@ -724,7 +729,9 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
 
 function inferFastSpecialist(message) {
   const text = String(message || '').toLowerCase();
-  if (!text || text.length > 360) return '';
+  // Long but clearly single-discipline requests should still use the fast lane.
+  // Mixed-domain and full-game requests are handled by the director instead.
+  if (!text || text.length > 1400) return '';
 
   const hasRewardLogic =
     /(?:coin|moneda|punto|recompensa|premio)/i.test(text) &&
@@ -936,7 +943,10 @@ async function generateMegaResponse({
   };
 
   // One concise but rigorous integration audit is faster than repeated model rounds.
-  const qaPasses = fastSpecialist && tier && tier.id === 'mega-lite'
+  // A single-domain fast-lane task has one responsible specialist and a
+  // tightly scoped prompt. Avoid a second full model round-trip; complex,
+  // multi-specialist work still receives the configured integration audit.
+  const qaPasses = fastSpecialist
     ? 0
     : (tier ? Math.min(2, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
   for (let pass = 0; pass < qaPasses && finalParsed.actions.length; pass++) {
