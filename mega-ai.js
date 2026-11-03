@@ -1,0 +1,442 @@
+'use strict';
+
+const MEGA_ROLES = Object.freeze({
+  'mega-director': {
+    name: 'MEGA DIRECTOR',
+    specialty: 'coordinación y arquitectura de proyectos Roblox',
+    env: 'MEGA_DIRECTOR_MODEL',
+    instructions: [
+      'Eres MEGA DIRECTOR. Eres el coordinador que convierte una petición grande en tareas verificables para especialistas.',
+      'Descompón el proyecto en tareas para mega-build, mega-scripting, mega-ui, mega-fx y mega-gameplay. No delegues tareas que no se necesitan.',
+      'Ordena las tareas por dependencias. Cada tarea debe tener un objetivo concreto, entregables y contexto suficiente.',
+      'No generes acciones de Roblox en esta fase. Devuelve solo JSON: {"reply":"resumen breve","projectBrief":"contexto compartido","tasks":[{"specialist":"mega-build","task":"objetivo concreto","dependsOn":[]}]}',
+      'Si la petición es una pregunta o no necesita varios especialistas, devuelve tasks:[] y responde brevemente en reply.',
+      'Máximo 5 tareas. Utiliza nombres exactos: mega-build, mega-scripting, mega-ui, mega-fx, mega-gameplay.'
+    ]
+  },
+  'mega-build': {
+    name: 'MEGA BUILD',
+    specialty: 'construcción física 3D, geometría y organización espacial',
+    env: 'MEGA_BUILD_MODEL',
+    instructions: [
+      'Eres MEGA BUILD, especialista en construcción 3D de Roblox Studio.',
+      'Diseña geometría reconocible desde varias vistas, con escala, profundidad, proporciones, alturas, apoyos, huecos, circulación y puntos de unión deliberados.',
+      'Calcula posiciones XYZ y tamaños XYZ. Evita filas planas de bloques, piezas flotantes e intersecciones accidentales.',
+      'Cada estructura debe tener una composición específica. Aprovecha hasta 60 piezas por CREATE_STRUCTURE cuando el detalle lo justifique; nunca añadas duplicados para inflar el conteo.',
+      'No escribas scripts salvo que estén expresamente dentro de tu tarea; delega la lógica a MEGA SCRIPTING.',
+      'Devuelve únicamente JSON válido con {"reply":"...","actions":[...]}. Usa exclusivamente acciones admitidas por el plugin.'
+    ]
+  },
+  'mega-scripting': {
+    name: 'MEGA SCRIPTING',
+    specialty: 'Luau, scripts, eventos, sistemas y depuración',
+    env: 'MEGA_SCRIPTING_MODEL',
+    instructions: [
+      'Eres MEGA SCRIPTING, ingeniero especialista en Luau y Roblox Studio.',
+      'Diseña arquitectura cliente/servidor correcta: el servidor valida estado, progreso, dinero, inventario, premios y solicitudes remotas.',
+      'Comprueba rutas, nombres, clases, dependencias, orden de creación, eventos, nil, estados iniciales, limpieza de conexiones, rendimiento y límites de frecuencia.',
+      'Nunca inventes APIs, assets, IDs, módulos externos o instancias no presentes en el contexto o en las acciones previas.',
+      'Conecta entrada → validación → cambio de estado → resultado visible. No dejes eventos sin conectar ni UI sin comportamiento cuando se requiera.',
+      'Respeta el límite de 10000 caracteres por script. Devuelve únicamente {"reply":"...","actions":[...]}.'
+    ]
+  },
+  'mega-ui': {
+    name: 'MEGA UI',
+    specialty: 'interfaces, UX, jerarquía visual y controles',
+    env: 'MEGA_UI_MODEL',
+    instructions: [
+      'Eres MEGA UI, diseñador UI/UX e implementador de interfaces para Roblox Studio.',
+      'Construye jerarquías ScreenGui/Frame/controles, no paneles vacíos. Define cuadrícula, márgenes, tamaños, anclajes, alineación, tipografía, contraste, jerarquía y estados.',
+      'Usa tamaños UDim2 correctos y evita solapamientos. No combines UIListLayout/UIGridLayout con Position manual en los mismos hijos. Respeta los límites reales de CREATE_TREE.',
+      'Cada control solicitado debe tener un contrato de interacción para que MEGA SCRIPTING pueda conectarlo. No afirmes que un botón funciona si solo creaste su apariencia.',
+      'Devuelve únicamente JSON válido con {"reply":"...","actions":[...]}.'
+    ]
+  },
+  'mega-fx': {
+    name: 'MEGA FX',
+    specialty: 'efectos visuales, iluminación, partículas y ambiente',
+    env: 'MEGA_FX_MODEL',
+    instructions: [
+      'Eres MEGA FX, especialista en efectos visuales de Roblox Studio.',
+      'Diseña una identidad visual coherente mediante iluminación, Atmosphere, Bloom, ColorCorrection, ParticleEmitter, Beam, Trail, Highlight y efectos admitidos.',
+      'Asocia cada efecto a un objeto, evento o ubicación concreta. Define color, intensidad, duración y condiciones de activación cuando la propiedad esté soportada.',
+      'No inventes IDs de texturas, sonidos, meshes ni assets externos. No sustituyas mecánicas por efectos visuales.',
+      'Evita saturar la escena con Neon o partículas constantes que perjudiquen el rendimiento. Devuelve únicamente JSON con {"reply":"...","actions":[...]}.'
+    ]
+  },
+  'mega-gameplay': {
+    name: 'MEGA GAMEPLAY',
+    specialty: 'mecánicas, reglas, progresión y experiencia del jugador',
+    env: 'MEGA_GAMEPLAY_MODEL',
+    instructions: [
+      'Eres MEGA GAMEPLAY, diseñador de sistemas y experiencia jugable para Roblox.',
+      'Define el bucle de juego: inicio, objetivo, acción del jugador, reglas, estado, feedback, éxito/fracaso, recompensa y reinicio.',
+      'Anticipa casos límite, multijugador, concurrencia, exploits, balance y persistencia solo cuando se solicite y las capacidades existan.',
+      'Coordina nombres de objetos, eventos, valores y contratos para los otros especialistas. No inventes objetos ya construidos.',
+      'No confundas una descripción de mecánica con su implementación. Devuelve únicamente JSON con {"reply":"...","actions":[...]}.'
+    ]
+  }
+});
+
+const SPECIALIST_IDS = Object.freeze([
+  'mega-build', 'mega-scripting', 'mega-ui', 'mega-fx', 'mega-gameplay'
+]);
+
+const QA_INSTRUCTIONS = [
+  'Eres MEGA QA, el integrador y auditor final de un proyecto Roblox.',
+  'Comprueba compatibilidad de acciones, coincidencia de nombres y rutas, orden de dependencias, contratos entre UI y lógica y omisiones importantes.',
+  'Corrige acciones concretas cuando sea posible. No inventes acciones, propiedades, clases, IDs, assets ni APIs. No cambies lo correcto innecesariamente.',
+  'Respeta el contrato: {"reply":"...","actions":[...]}. Máximo 30 acciones, 60 piezas por CREATE_STRUCTURE, 300 nodos por CREATE_TREE y 10000 caracteres por script.',
+  'Si una parte no se puede implementar con el esquema, conserva lo compatible y dilo en reply. Nunca afirmes que ejecutaste pruebas en Roblox Studio.'
+].join('\n');
+
+function isMegaModel(model) {
+  return model === 'mega-director' || Object.prototype.hasOwnProperty.call(MEGA_ROLES, model);
+}
+
+function getMegaBaseModel() {
+  return process.env.MEGA_BASE_MODEL || 'mega-base';
+}
+
+function getMegaEndpoint() {
+  const raw = String(process.env.MEGA_INFERENCE_URL || '').trim().replace(/\/+$/, '');
+  if (!raw) return '';
+  if (/\/v1\/chat\/completions$/i.test(raw)) return raw;
+  if (/\/v1$/i.test(raw)) return raw + '/chat/completions';
+  return raw + '/v1/chat/completions';
+}
+
+function getRoleModel(modelId) {
+  const role = MEGA_ROLES[modelId];
+  if (!role) return getMegaBaseModel();
+  return process.env[role.env] || getMegaBaseModel();
+}
+
+function getMegaCatalog() {
+  const configured = Boolean(getMegaEndpoint());
+  return [
+    {
+      id: 'mega-director',
+      provider: 'mega',
+      name: 'MEGA AI · Director',
+      note: 'Coordina especialistas y proyectos completos',
+      tier: 'mega',
+      available: configured,
+      inferenceModel: getRoleModel('mega-director'),
+      trainedAdapter: getRoleModel('mega-director') !== getMegaBaseModel()
+    },
+    ...Object.entries(MEGA_ROLES).filter(([id]) => id !== 'mega-director').map(([id, role]) => ({
+      id,
+      provider: 'mega',
+      name: role.name,
+      note: role.specialty + ' · adaptador especializado pendiente',
+      tier: 'mega',
+      available: configured,
+      inferenceModel: getRoleModel(id),
+      trainedAdapter: getRoleModel(id) !== getMegaBaseModel()
+    }))
+  ];
+}
+
+function getMegaStatus() {
+  return {
+    configured: Boolean(getMegaEndpoint()),
+    endpointConfigured: Boolean(getMegaEndpoint()),
+    baseModel: getMegaBaseModel(),
+    inferenceProvider: 'self-hosted',
+    models: getMegaCatalog().map(({ id, name, note, available, trainedAdapter }) => ({
+      id, name, note, available, trainedAdapter
+    }))
+  };
+}
+
+function parseJsonContent(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  let text = raw.trim().replace(/^\x60{3}(?:json)?\s*/i, '').replace(/\s*\x60{3}$/, '');
+  try {
+    const value = JSON.parse(text);
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch {}
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try {
+    const value = JSON.parse(text.slice(start, end + 1));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history.slice(-8).map(item => {
+    const role = item && (item.role === 'model' || item.role === 'assistant') ? 'assistant' : 'user';
+    const content = Array.isArray(item && item.parts)
+      ? item.parts.map(part => part && typeof part.text === 'string' ? part.text : '').join('\n')
+      : (item && typeof item.text === 'string' ? item.text : '');
+    return content ? { role, content: content.slice(0, 4000) } : null;
+  }).filter(Boolean);
+}
+
+function roleSystemPrompt(roleId, sharedSystemInstruction) {
+  if (roleId === 'qa') return sharedSystemInstruction + '\n\n' + QA_INSTRUCTIONS;
+  const role = MEGA_ROLES[roleId];
+  return sharedSystemInstruction + '\n\n' + role.instructions.join('\n');
+}
+
+function specialistMessages(roleId, sharedSystemInstruction, message, context, history) {
+  const system = roleSystemPrompt(roleId, sharedSystemInstruction);
+  const contextText = context ? '\n\nCONTEXTO COMPARTIDO DEL PROYECTO:\n' + context : '';
+  return [
+    { role: 'system', content: system },
+    ...history,
+    {
+      role: 'user',
+      content: 'PETICIÓN ORIGINAL:\n' + message + contextText +
+        '\n\nDevuelve solo JSON válido con las propiedades reply (string) y actions (array). ' +
+        'Usa exclusivamente acciones admitidas por el contrato del sistema. No uses Markdown.'
+    }
+  ];
+}
+
+async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, temperature = 0.15 }) {
+  const endpoint = getMegaEndpoint();
+  if (!endpoint) {
+    const error = new Error('MEGA AI todavía no está conectado a un servidor de inferencia propio. Configura MEGA_INFERENCE_URL en Render y despliega el servidor GPU.');
+    error.code = 'MEGA_NOT_CONFIGURED';
+    error.httpStatus = 503;
+    throw error;
+  }
+
+  const role = MEGA_ROLES[roleId];
+  const model = roleId === 'qa'
+    ? (process.env.MEGA_QA_MODEL || process.env.MEGA_DIRECTOR_MODEL || getMegaBaseModel())
+    : getRoleModel(roleId);
+  const headers = { 'Content-Type': 'application/json' };
+  if (process.env.MEGA_INFERENCE_API_KEY) {
+    headers.Authorization = 'Bearer ' + process.env.MEGA_INFERENCE_API_KEY;
+  }
+
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      signal,
+      headers,
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+        response_format: { type: 'json_object' }
+      })
+    });
+  } catch (cause) {
+    const error = new Error('No se pudo conectar con el servidor propio de MEGA AI. Comprueba MEGA_INFERENCE_URL y que el servidor GPU esté activo.');
+    error.code = 'MEGA_CONNECTION_FAILED';
+    error.httpStatus = 503;
+    error.cause = cause;
+    throw error;
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = String((payload && payload.error && payload.error.message) || payload.message || '').slice(0, 220);
+    const error = new Error('El servidor de MEGA AI rechazó la solicitud (HTTP ' + response.status + '). ' + detail);
+    error.code = 'MEGA_INFERENCE_HTTP_ERROR';
+    error.httpStatus = response.status === 429 ? 429 : 502;
+    throw error;
+  }
+
+  const output = payload && payload.choices && payload.choices[0] &&
+    payload.choices[0].message && payload.choices[0].message.content;
+  const parsed = parseJsonContent(output);
+  if (!parsed) {
+    const error = new Error('El especialista MEGA devolvió una respuesta que no cumple el JSON requerido. No se enviaron acciones a Roblox Studio.');
+    error.code = 'MEGA_INVALID_OUTPUT';
+    error.httpStatus = 502;
+    throw error;
+  }
+
+  return { parsed, model };
+}
+
+function fallbackSpecialists(message) {
+  const text = String(message || '');
+  const tasks = [];
+  if (/estadio|casa|edificio|torre|mapa|obby|constru|terreno|interior|tienda|campo/i.test(text)) {
+    tasks.push({ specialist: 'mega-build', task: 'Construye los elementos físicos 3D solicitados con geometría reconocible y coordenadas coherentes.', dependsOn: [] });
+  }
+  if (/interfaz|men[uú]|hud|inventario|tienda|pantalla|bot[oó]n|ui/i.test(text)) {
+    tasks.push({ specialist: 'mega-ui', task: 'Construye la interfaz solicitada y define controles, nombres y rutas que deben conectarse.', dependsOn: [] });
+  }
+  if (/efecto|part[ií]cula|iluminaci[oó]n|ambiente|aura|trail|beam/i.test(text)) {
+    tasks.push({ specialist: 'mega-fx', task: 'Crea los efectos visuales y el ambiente solicitados con propiedades admitidas.', dependsOn: [] });
+  }
+  if (/mec[aá]nica|juego|gameplay|partida|ronda|puntos|monedas|inventario|recompensa|progresi[oó]n/i.test(text)) {
+    tasks.push({ specialist: 'mega-gameplay', task: 'Define e implementa los elementos de la mecánica y el ciclo de juego solicitados.', dependsOn: [] });
+    tasks.push({ specialist: 'mega-scripting', task: 'Implementa la lógica Luau y los eventos necesarios para que la mecánica funcione.', dependsOn: ['mega-gameplay'] });
+  } else if (/script|program|evento|funcion|función|remote|luau|codigo|código|sistema|arregl|error|depur/i.test(text)) {
+    tasks.push({ specialist: 'mega-scripting', task: 'Implementa o corrige los scripts, eventos y sistemas solicitados.', dependsOn: [] });
+  }
+  return tasks.slice(0, 5);
+}
+
+async function generateMegaResponse({
+  selectedModel,
+  message,
+  history,
+  buildMode,
+  systemInstruction,
+  signal,
+  maxActions = 30
+}) {
+  const normalizedHistory = normalizeHistory(history);
+  const isDirector = selectedModel === 'mega-director' || buildMode === 'full-game';
+  let tasks;
+  let projectBrief = '';
+  let reply = '';
+
+  if (isDirector) {
+    const planPrompt = [
+      { role: 'system', content: roleSystemPrompt('mega-director', systemInstruction) },
+      ...normalizedHistory,
+      {
+        role: 'user',
+        content: 'Analiza esta solicitud como director de un equipo de especialistas Roblox. ' +
+          'No generes acciones todavía. Devuelve SOLO JSON con {"reply":"...","projectBrief":"...","tasks":[{"specialist":"mega-build","task":"...","dependsOn":[]}]}.' +
+          '\n\nPETICIÓN:\n' + message +
+          '\n\nMODO:\n' + (buildMode === 'full-game' ? 'Juego completo: reúne todas las especialidades necesarias.' : 'Utiliza solamente las especialidades necesarias.') +
+          '\n\nOrdena las tareas respetando sus dependencias. No delegues por rutina: cada especialista debe aportar trabajo real. Máximo cinco tareas.'
+      }
+    ];
+    const planned = await callMegaModel({
+      roleId: 'mega-director',
+      messages: planPrompt,
+      signal,
+      maxTokens: 2500,
+      temperature: 0.1
+    });
+    const plan = planned.parsed;
+    projectBrief = typeof plan.projectBrief === 'string' ? plan.projectBrief.slice(0, 5000) : '';
+    reply = typeof plan.reply === 'string' ? plan.reply.slice(0, 1200) : '';
+    const allowed = new Set(SPECIALIST_IDS);
+    tasks = Array.isArray(plan.tasks)
+      ? plan.tasks.slice(0, 5).map(task => ({
+          specialist: String(task && task.specialist || '').toLowerCase(),
+          task: typeof (task && task.task) === 'string' ? task.task.slice(0, 1600) : '',
+          dependsOn: Array.isArray(task && task.dependsOn) ? task.dependsOn.filter(id => typeof id === 'string').slice(0, 5) : []
+        })).filter(task => allowed.has(task.specialist) && task.task)
+      : [];
+    if (tasks.length === 0) tasks = fallbackSpecialists(message);
+  } else {
+    tasks = [{ specialist: selectedModel, task: message, dependsOn: [] }];
+  }
+
+  if (!tasks.length) {
+    return {
+      reply: reply || 'No hace falta crear ni modificar objetos para responder a esta solicitud.',
+      actions: [],
+      modelUsed: 'MEGA DIRECTOR',
+      agentTrace: []
+    };
+  }
+
+  const results = [];
+  const combinedActions = [];
+  for (const task of tasks) {
+    const previousContext = results.map(result => ({
+      specialist: result.specialist,
+      task: result.task,
+      reply: result.reply,
+      actions: result.actions
+    }));
+    const context = [
+      projectBrief ? 'RESUMEN DEL DIRECTOR:\n' + projectBrief : '',
+      'TAREA ASIGNADA A ' + task.specialist.toUpperCase() + ':\n' + task.task,
+      task.dependsOn.length ? 'DEPENDENCIAS DECLARADAS: ' + task.dependsOn.join(', ') : '',
+      previousContext.length ? 'ENTREGAS ANTERIORES DE OTROS ESPECIALISTAS:\n' + JSON.stringify(previousContext).slice(0, 14000) : '',
+      'No contradigas las entregas previas. Conserva exactamente los nombres y rutas compartidos.'
+    ].filter(Boolean).join('\n\n');
+
+    const generated = await callMegaModel({
+      roleId: task.specialist,
+      messages: specialistMessages(task.specialist, systemInstruction, message, context, normalizedHistory),
+      signal,
+      maxTokens: 6500,
+      temperature: 0.12
+    });
+    const agentReply = typeof generated.parsed.reply === 'string' ? generated.parsed.reply.slice(0, 1400) : '';
+    const actions = Array.isArray(generated.parsed.actions) ? generated.parsed.actions : [];
+    if (actions.length > maxActions || combinedActions.length + actions.length > maxActions) {
+      const error = new Error('El equipo de especialistas superó el límite de acciones del plugin. Divide el proyecto en etapas.');
+      error.code = 'MEGA_ACTION_LIMIT';
+      error.httpStatus = 422;
+      throw error;
+    }
+    results.push({
+      specialist: task.specialist,
+      task: task.task,
+      reply: agentReply,
+      actions,
+      model: generated.model
+    });
+    combinedActions.push(...actions);
+  }
+
+  const reviewContext = [
+    projectBrief ? 'RESUMEN DEL PROYECTO:\n' + projectBrief : '',
+    'ENTREGAS DE ESPECIALISTAS:\n' + JSON.stringify(results).slice(0, 26000),
+    'Petición original: ' + message
+  ].filter(Boolean).join('\n\n');
+
+  let finalParsed = {
+    reply: reply || results.map(result => result.reply).filter(Boolean).join(' '),
+    actions: combinedActions
+  };
+
+  if (isDirector && combinedActions.length) {
+    const reviewed = await callMegaModel({
+      roleId: 'qa',
+      messages: specialistMessages('qa', systemInstruction, message,
+        reviewContext + '\n\nBORRADOR DE ACCIONES:\n' + JSON.stringify(finalParsed),
+        []),
+      signal,
+      maxTokens: 6500,
+      temperature: 0.08
+    });
+    if (Array.isArray(reviewed.parsed.actions)) {
+      finalParsed = {
+        reply: typeof reviewed.parsed.reply === 'string' ? reviewed.parsed.reply.slice(0, 2500) : finalParsed.reply,
+        actions: reviewed.parsed.actions
+      };
+    }
+  }
+
+  if (!Array.isArray(finalParsed.actions) || finalParsed.actions.length > maxActions) {
+    const error = new Error('La respuesta integrada de MEGA no cumple el límite de acciones admitido. No se enviará al plugin.');
+    error.code = 'MEGA_INVALID_PLAN';
+    error.httpStatus = 422;
+    throw error;
+  }
+
+  return {
+    reply: finalParsed.reply || reply || 'MEGA terminó el plan de especialistas.',
+    actions: finalParsed.actions,
+    modelUsed: isDirector ? 'MEGA DIRECTOR + ' + results.map(result => result.specialist.toUpperCase().replace('MEGA-', 'MEGA ')).join(' + ') : MEGA_ROLES[selectedModel].name,
+    agentTrace: results.map(result => ({
+      specialist: result.specialist,
+      model: result.model,
+      actionCount: result.actions.length
+    }))
+  };
+}
+
+module.exports = {
+  MEGA_ROLES,
+  isMegaModel,
+  getMegaCatalog,
+  getMegaStatus,
+  generateMegaResponse
+};
