@@ -15,6 +15,7 @@ ARGS=(
   --max-model-len "$MAX_MODEL_LEN"
   --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
   --tensor-parallel-size "${MEGA_TENSOR_PARALLEL_SIZE:-1}"
+  --language-model-only
 )
 
 if [[ -n "${MEGA_INFERENCE_API_KEY:-}" ]]; then
