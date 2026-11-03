@@ -24,7 +24,10 @@ const MEGA_ROLES = Object.freeze({
       'No entregues una construcción genérica hecha de cubos repetidos. Traduce el objeto pedido a sus componentes reconocibles: base, estructura principal, superficies, accesos, marcos, soportes y detalles propios del objeto, solo cuando correspondan. Varía formas y dimensiones con intención; usa Block, Wedge, CornerWedge, Cylinder, Ball u otras clases físicas admitidas cuando mejoren la forma.',
       'Calcula posiciones XYZ, tamaños XYZ y rotaciones. Comprueba contactos, grosor de muros, huecos de puertas y ventanas, alturas transitables, separaciones y colisiones conceptuales. Evita filas planas, piezas flotantes, volúmenes duplicados e intersecciones accidentales.',
       'Entrega acabado visual deliberado: asigna a cada pieza un color explícito de una paleta coherente de 2 a 4 colores; usa materiales apropiados (por ejemplo, Concrete para cimientos, Wood para madera, Metal para soportes, Glass para ventanas y SmoothPlastic para superficies limpias), siempre que estén admitidos. Separa visualmente estructura, detalles y acentos sin convertir todo en Neon.',
-      'Cada estructura debe tener una composición específica. Aprovecha hasta 60 piezas por CREATE_STRUCTURE cuando el detalle lo justifique; nunca añadas duplicados para inflar el conteo.',
+      'Para modelos completos prefiere CREATE_MODEL_BLUEPRINT: {"type":"CREATE_MODEL_BLUEPRINT","name":"...","parent":"Workspace","objects":[{"name":"...","shape":"Block|Ball|Cylinder|Wedge|CornerWedge|Truss","size":[x,y,z],"position":[x,y,z],"rotation":[x,y,z],"color":"BrickColor name","material":"Enum.Material name","anchored":true,"canCollide":true}],"primaryPart":"..."}. Este constructor admite hasta 250 piezas en un solo Model; CREATE_STRUCTURE admite hasta 60. No desperdicies ese presupuesto: cada pieza debe formar parte de un diseño reconocible.',
+      'CASA: no es una caja ni tres filas. Diseña una vivienda completa y con profundidad: plataforma/suelo, perímetro de cuatro lados en varios segmentos dejando hueco real para la entrada, fachada principal y trasera, paredes laterales, puerta en el hueco, dos o más ventanas con marcos y cristales, techo elevado con faldones o dos planos inclinados, aleros, escalones/porche y detalles de fachada. Las paredes deben rodear un espacio interior; la puerta no debe quedar tapada; el techo debe cubrir la huella. Usa coordenadas X/Y/Z coherentes y piezas en más de un plano.',
+      'Antes de entregar una casa, revisa que el plano superior muestre un perímetro y no una fila, que la elevación muestre paredes y techo a distintas alturas, y que la fachada tenga aberturas reales. Usa normalmente 18–35 piezas bien colocadas para una casa sencilla detallada; más piezas solo si aportan arquitectura.',
+      'Cada estructura debe tener una composición específica. Aprovecha hasta 60 piezas por CREATE_STRUCTURE o hasta 250 por CREATE_MODEL_BLUEPRINT cuando el detalle lo justifique; nunca añadas duplicados para inflar el conteo.',
       'No escribas scripts salvo que estén expresamente dentro de tu tarea; delega la lógica a MEGA SCRIPTING.',
       'Devuelve únicamente JSON válido con {"reply":"...","actions":[...]}. Usa exclusivamente acciones admitidas por el plugin.'
     ]
@@ -397,11 +400,19 @@ function normalizeHistory(history) {
   }).filter(Boolean);
 }
 
+const MEGA_DEVELOPER_PERSONA = [
+  'PERSONALIDAD Y CONVERSACIÓN: compórtate como un desarrollador experimentado de Roblox Studio que trabaja junto al usuario, no como un chatbot corporativo ni un bot que recita reglas.',
+  'Habla español natural, directo y amable. Entiende el contexto de la conversación y responde como un compañero técnico: puedes decir “Va”, “Sí, eso lo resolvería así” o “Encontré el problema” cuando encaje, sin repetir muletillas.',
+  'Las respuestas visibles deben ser cortas y humanas: normalmente una o dos frases. No enumeres el proceso interno, no anuncies que eres una IA, no nombres tus roles internos y no digas “he preparado las acciones solicitadas”.',
+  'Si el usuario pregunta algo, contesta como desarrollador y no generes acciones innecesarias. Si pide construir o programar, trabaja primero y después explica brevemente qué quedó hecho y qué falta, sin afirmar que Studio lo ejecutó antes de la confirmación.',
+  'No conviertas una conversación natural en un formulario. Pregunta solo cuando falte una decisión que cambie sustancialmente el resultado; en lo demás, toma decisiones profesionales razonables y explícitalas brevemente.'
+].join('\n');
+
 function roleSystemPrompt(roleId, sharedSystemInstruction) {
   const common = MEGA_INTENT_AND_VISUAL_RULES.join('\n');
-  if (roleId === 'qa') return sharedSystemInstruction + '\n\n' + common + '\n\n' + QA_INSTRUCTIONS;
+  if (roleId === 'qa') return sharedSystemInstruction + '\n\n' + MEGA_DEVELOPER_PERSONA + '\n\n' + common + '\n\n' + QA_INSTRUCTIONS;
   const role = MEGA_ROLES[roleId];
-  return sharedSystemInstruction + '\n\n' + common + '\n\n' + role.instructions.join('\n');
+  return sharedSystemInstruction + '\n\n' + MEGA_DEVELOPER_PERSONA + '\n\n' + common + '\n\n' + role.instructions.join('\n');
 }
 
 function specialistMessages(roleId, sharedSystemInstruction, message, context, history) {
@@ -752,6 +763,63 @@ function inferFastSpecialist(message) {
   return uniqueDomains.length === 1 ? uniqueDomains[0] : '';
 }
 
+function isComplexGeometryRequest(message) {
+  return /\\b(casa|vivienda|edificio|castillo|estadio|ciudad|torre|puente|escuela|hospital|tienda|granja|mansión|mansion|mapa|obby|base|interior)\\b/i.test(String(message || ''));
+}
+
+function analyzeActionGeometry(actions, message) {
+  if (!isComplexGeometryRequest(message)) return [];
+  const geometryActions = (Array.isArray(actions) ? actions : []).filter(action =>
+    action && ['CREATE_STRUCTURE', 'CREATE_MODEL_BLUEPRINT'].includes(action.type)
+  );
+  const reports = geometryActions.map(action => {
+    const parts = Array.isArray(action.parts) ? action.parts :
+      Array.isArray(action.objects) ? action.objects : [];
+    const points = parts.filter(part =>
+      part && Array.isArray(part.position) && part.position.length >= 3 &&
+      part.position.slice(0, 3).every(value => Number.isFinite(Number(value)))
+    ).map(part => ({
+      x: Number(part.position[0]), y: Number(part.position[1]), z: Number(part.position[2]),
+      sx: Array.isArray(part.size) ? Number(part.size[0]) || 0 : 0,
+      sy: Array.isArray(part.size) ? Number(part.size[1]) || 0 : 0,
+      sz: Array.isArray(part.size) ? Number(part.size[2]) || 0 : 0
+    }));
+    const distinct = values => new Set(values.map(value => Math.round(value * 10) / 10)).size;
+    const span = key => points.length ? Math.max(...points.map(p => p[key])) - Math.min(...points.map(p => p[key])) : 0;
+    const signatures = points.map(p => [p.x,p.y,p.z,p.sx,p.sy,p.sz].map(v => Math.round(v*10)/10).join(':'));
+    const duplicates = signatures.length - new Set(signatures).size;
+    const metrics = {
+      model: String(action.name || 'Modelo sin nombre'),
+      partCount: parts.length,
+      positionedPartCount: points.length,
+      distinctX: distinct(points.map(p => p.x)),
+      distinctY: distinct(points.map(p => p.y)),
+      distinctZ: distinct(points.map(p => p.z)),
+      spanX: Math.round(span('x') * 10) / 10,
+      spanY: Math.round(span('y') * 10) / 10,
+      spanZ: Math.round(span('z') * 10) / 10,
+      duplicateParts: duplicates
+    };
+    const issues = [];
+    const houseIntent = /\\b(casa|vivienda|mansión|mansion)\\b/i.test(message);
+    if (parts.length < (houseIntent ? 14 : 8)) issues.push('Muy pocas piezas para la complejidad solicitada.');
+    if (points.length < Math.min(parts.length, houseIntent ? 14 : 8)) issues.push('Muchas piezas no tienen coordenadas XYZ válidas.');
+    if (metrics.distinctX < 3 || metrics.spanX < 6) issues.push('La composición casi no ocupa el eje X.');
+    if (metrics.distinctZ < 3 || metrics.spanZ < 6) issues.push('La composición casi no ocupa el eje Z; puede ser una fila o fachada plana.');
+    if (houseIntent && (metrics.distinctY < 3 || metrics.spanY < 5)) issues.push('La vivienda no muestra suficientes niveles de altura para suelo, paredes y techo.');
+    if (duplicates > Math.max(1, Math.floor(parts.length * 0.15))) issues.push('Hay demasiadas piezas duplicadas en la misma posición y tamaño.');
+    return { ...metrics, issues };
+  });
+  if (!geometryActions.length) {
+    return [{ model: 'Sin modelo 3D', partCount: 0, issues: ['La petición requiere una construcción 3D reconocible, pero no se generó CREATE_STRUCTURE ni CREATE_MODEL_BLUEPRINT.'] }];
+  }
+  return reports;
+}
+
+function hasGeometryDefects(actions, message) {
+  return analyzeActionGeometry(actions, message).some(report => report.issues && report.issues.length > 0);
+}
+
 function fallbackSpecialists(message) {
   const text = String(message || '');
   const tasks = [];
@@ -946,16 +1014,25 @@ async function generateMegaResponse({
   // A single-domain fast-lane task has one responsible specialist and a
   // tightly scoped prompt. Avoid a second full model round-trip; complex,
   // multi-specialist work still receives the configured integration audit.
-  const qaPasses = fastSpecialist
+  const geometryReport = analyzeActionGeometry(finalParsed.actions, message);
+  const geometryDefects = geometryReport.some(report => report.issues && report.issues.length);
+  // Fast builds stay single-pass when their geometry is sound. A measurable
+  // spatial defect triggers one targeted repair instead of shipping a bad model.
+  const configuredQaPasses = fastSpecialist
     ? 0
     : (tier ? Math.min(2, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
-  for (let pass = 0; pass < qaPasses && finalParsed.actions.length; pass++) {
-    const passPrompt = 'AUDITORÍA FINAL INTEGRAL: comprueba dependencias, rutas, nombres, compatibilidad, fidelidad exacta a la petición, colores visuales y funcionalidad. Corrige solo defectos concretos. Elimina extras no solicitados. Devuelve las acciones completas, no una explicación.';
+  const qaPasses = Math.max(configuredQaPasses, geometryDefects ? 1 : 0);
+  for (let pass = 0; pass < qaPasses && (finalParsed.actions.length || geometryDefects); pass++) {
+    const passPrompt = 'AUDITORÍA FINAL INTEGRAL: comprueba dependencias, rutas, nombres, compatibilidad, fidelidad exacta a la petición, colores visuales y funcionalidad. Corrige solo defectos concretos. Elimina extras no solicitados. Devuelve las acciones completas, no una explicación.' +
+      (geometryDefects
+        ? '\\n\\nDIAGNÓSTICO GEOMÉTRICO MEDIDO: ' + JSON.stringify(geometryReport) +
+          '\\nREPARACIÓN OBLIGATORIA: el borrador no se puede entregar así. Rediseña las acciones geométricas desde cero para corregir todos los defectos medidos. No conserves una fila, cuadrícula plana ni bloques repetidos. Para una casa crea una vivienda con perímetro cerrado, hueco real de entrada, ventanas, puerta, paredes en profundidad y techo por encima; usa CREATE_MODEL_BLUEPRINT con objetos XYZ completos. La geometría debe poder reconocerse sin leer los nombres.'
+        : '');
     const reviewed = await callMegaModel({
       roleId: 'qa',
       messages: specialistMessages('qa', tierSystemInstruction, message,
-        reviewContext + '\n\n' + passPrompt +
-        '\n\nBORRADOR ACTUAL DE ACCIONES:\n' + JSON.stringify(finalParsed),
+        reviewContext + '\\n\\n' + passPrompt +
+        '\\n\\nBORRADOR ACTUAL DE ACCIONES:\\n' + JSON.stringify(finalParsed),
         []),
       signal,
       maxTokens: tier ? tier.qaTokens : 4800,
@@ -1004,5 +1081,6 @@ module.exports = {
   getMegaCatalog,
   getMegaStatus,
   inferFastSpecialist,
+  analyzeActionGeometry,
   generateMegaResponse
 };
