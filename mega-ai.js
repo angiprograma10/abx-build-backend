@@ -455,13 +455,13 @@ function getBootstrapModelCandidates(tierId) {
     .map(value => value.trim())
     .filter(Boolean);
   const fallbacks = configuredFallbacks.length ? configuredFallbacks : profile.models;
-  const preferredKey = (tierId || 'default') + '|' + primary + '|' + fallbacks.join(',');
-  const preferred = preferredBootstrapModels.get(preferredKey);
+  const cacheKey = (tierId || 'default') + '|' + primary;
+  const preferred = preferredBootstrapModels.get(cacheKey);
   const candidates = [...new Set([primary, ...fallbacks].filter(Boolean))].slice(0, 5);
-  if (preferred && candidates.includes(preferred)) {
-    return [preferred, ...candidates.filter(candidate => candidate !== preferred)];
-  }
-  return candidates;
+  const ordered = preferred && candidates.includes(preferred)
+    ? [preferred, ...candidates.filter(candidate => candidate !== preferred)]
+    : candidates;
+  return { models: ordered, cacheKey };
 }
 
 function waitForRetry(delayMs, signal) {
@@ -547,7 +547,8 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
       throw error;
     }
 
-    const models = getBootstrapModelCandidates(tierId);
+    const bootstrapCandidates = getBootstrapModelCandidates(tierId);
+    const models = bootstrapCandidates.models;
     let activeModel = '';
     let lastFailure = null;
     const failures = [];
@@ -618,11 +619,7 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
             const payload = await response.json().catch(() => ({}));
             if (response.ok) {
               activeModel = candidateModel;
-              const preferredCacheKey = (tierId || 'default') + '|' +
-                String(models[0] || '') + '|' +
-                String(process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS || '')
-                  .split(/[;,]/).map(value => value.trim()).filter(Boolean).join(',');
-              preferredBootstrapModels.set(preferredCacheKey, candidateModel);
+              preferredBootstrapModels.set(bootstrapCandidates.cacheKey, candidateModel);
               return payload?.candidates?.[0]?.content?.parts
                 ?.map(part => typeof part.text === 'string' ? part.text : '')
                 .join('') || '';
