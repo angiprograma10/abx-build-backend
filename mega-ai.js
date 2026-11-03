@@ -737,7 +737,7 @@ function inferFastSpecialist(message) {
   if (/\b(interfaz|men[uú]|hud|inventario visual|pantalla|bot[oó]n|ui|panel|tienda visual)\b/i.test(text)) domains.push('mega-ui');
   if (/\b(vfx|efecto|part[ií]cula|iluminaci[oó]n|ambiente|aura|trail|beam|explosi[oó]n visual)\b/i.test(text)) domains.push('mega-fx');
   if (/\b(script|program|luau|c[oó]digo|funci[oó]n|evento|remote|monedas|coins|recompensa|puntos|salto|saltar|guardar datos)\b/i.test(text)) domains.push('mega-scripting');
-  if (/\b(diseña el juego|diseñar el juego|reglas del juego|bucle de juego|mec[aá]nica de juego|ronda|progresi[oó]n|modo de juego)\b/i.test(text)) domains.push('mega-gameplay');
+  if (/\b(diseña el juego|diseñar el juego|reglas del juego|bucle de juego|mec[aá]nica de juego|ronda|progresi[oó]n|modo de juego|interacci[oó]n)\b/i.test(text)) domains.push('mega-gameplay');
 
   const uniqueDomains = [...new Set(domains)];
   return uniqueDomains.length === 1 ? uniqueDomains[0] : '';
