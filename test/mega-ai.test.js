@@ -683,3 +683,116 @@ test('uses a user-friendly failure after all structured-output repairs are exhau
     else process.env.GEMINI_API_KEY = oldKey;
   }
 });
+
+
+test('detects collapsed house geometry and triggers a targeted repair pass', async () => {
+  const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
+  const oldModel = process.env.MEGA_BOOTSTRAP_MODEL;
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'test-model';
+
+  const weakHouse = {
+    type: 'CREATE_MODEL_BLUEPRINT',
+    name: 'Casa',
+    parent: 'Workspace',
+    objects: Array.from({ length: 18 }, (_, i) => ({
+      name: 'Block' + i,
+      shape: 'Block',
+      size: [4, 4, 4],
+      position: [i * 4, 5, 0],
+      color: 'White',
+      material: 'Wood'
+    }))
+  };
+  const goodHouse = {
+    type: 'CREATE_MODEL_BLUEPRINT',
+    name: 'Casa Moderna',
+    parent: 'Workspace',
+    objects: [
+      {name:'Floor',shape:'Block',size:[30,1,24],position:[0,0,0],color:'Dark stone grey',material:'Concrete'},
+      {name:'FrontLeft',shape:'Block',size:[11,9,1],position:[-9,5,12],color:'White',material:'Concrete'},
+      {name:'FrontRight',shape:'Block',size:[11,9,1],position:[9,5,12],color:'White',material:'Concrete'},
+      {name:'BackWall',shape:'Block',size:[30,9,1],position:[0,5,-12],color:'White',material:'Concrete'},
+      {name:'LeftWall',shape:'Block',size:[1,9,24],position:[-15,5,0],color:'White',material:'Concrete'},
+      {name:'RightWall',shape:'Block',size:[1,9,24],position:[15,5,0],color:'White',material:'Concrete'},
+      {name:'Door',shape:'Block',size:[5,7,0.5],position:[0,3.5,12],color:'Brown',material:'Wood'},
+      {name:'Window1',shape:'Block',size:[5,4,0.4],position:[-8,6,12.6],color:'Pastel light blue',material:'Glass'},
+      {name:'Window2',shape:'Block',size:[5,4,0.4],position:[8,6,12.6],color:'Pastel light blue',material:'Glass'},
+      {name:'RoofLeft',shape:'Wedge',size:[16,5,28],position:[-7,12,0],rotation:[0,0,0],color:'Really black',material:'Slate'},
+      {name:'RoofRight',shape:'Wedge',size:[16,5,28],position:[7,12,0],rotation:[0,180,0],color:'Really black',material:'Slate'},
+      {name:'Porch',shape:'Block',size:[12,1,5],position:[0,1,15],color:'Brown',material:'Wood'},
+      {name:'Step',shape:'Block',size:[8,0.5,2],position:[0,0.5,18],color:'Dark stone grey',material:'Concrete'},
+      {name:'Trim1',shape:'Block',size:[30,0.5,0.5],position:[0,9.7,12],color:'Black',material:'Wood'}
+    ]
+  };
+  const responses = [
+    {reply:'Te hice una casa.',actions:[weakHouse]},
+    {reply:'Ahora sí: rehice la casa con volumen, entrada, ventanas y techo.',actions:[goodHouse]}
+  ];
+  const requests = [];
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push(body);
+    const next = responses.shift();
+    return {ok:true,status:200,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify(next)}]}}]})};
+  };
+  try {
+    assert.equal(mega.analyzeActionGeometry([weakHouse], 'Haz una casa moderna')[0].issues.length > 0, true);
+    const result = await mega.generateMegaResponse({
+      selectedModel:'mega-lite',
+      message:'Haz una casa moderna',
+      history:[],
+      buildMode:'standard',
+      systemInstruction:'Test',
+      signal:undefined
+    });
+    assert.equal(requests.length, 2, 'bad geometry must trigger exactly one targeted repair');
+    assert.match(requests[1].contents.at(-1).parts[0].text, /DIAGNÓSTICO GEOMÉTRICO MEDIDO/);
+    assert.match(requests[1].contents.at(-1).parts[0].text, /REPARACIÓN OBLIGATORIA/);
+    assert.equal(result.actions[0].name, 'Casa Moderna');
+    assert.equal(mega.analyzeActionGeometry(result.actions, 'Haz una casa moderna')[0].issues.length, 0);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL; else process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL; else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
+  }
+});
+
+test('MEGA specialist prompts use a concise natural Roblox developer voice and blueprint construction contract', async () => {
+  const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
+  const oldModel = process.env.MEGA_BOOTSTRAP_MODEL;
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'test-model';
+  let captured;
+  global.fetch = async (_url, options) => {
+    captured = JSON.parse(options.body);
+    return {ok:true,status:200,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify({reply:'Va, te construyo una casa con volumen y fachada.',actions:[]})}]}}]})};
+  };
+  try {
+    await mega.generateMegaResponse({
+      selectedModel:'mega-lite',
+      message:'Construye una casa moderna',
+      history:[],
+      buildMode:'standard',
+      systemInstruction:'Test',
+      signal:undefined
+    });
+    const prompt = captured.systemInstruction.parts[0].text;
+    assert.match(prompt, /desarrollador experimentado de Roblox Studio/);
+    assert.match(prompt, /respuestas visibles deben ser cortas y humanas/);
+    assert.match(prompt, /CREATE_MODEL_BLUEPRINT/);
+    assert.match(prompt, /No es una caja ni tres filas/);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL; else process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL; else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
+  }
+});
