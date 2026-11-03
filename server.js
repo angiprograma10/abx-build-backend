@@ -243,6 +243,24 @@ Entrega trabajo con acabado profesional, no solo algo que técnicamente exista. 
 - No inventes acciones, clases, propiedades, assets ni resultados. Si el esquema no permite una parte, dilo brevemente y ofrece la mejor alternativa compatible.
 - Devuelve solo JSON válido con reply y actions según el contrato. Nunca añadas Markdown ni comentarios fuera del JSON.`;
 
+
+const INTENT_FIDELITY_AND_VISUAL_INSTRUCTION = `
+REGLA CRÍTICA — RESPETO EXACTO A LA PETICIÓN
+1. No inventes características. Implementa únicamente lo que el usuario pidió y las dependencias técnicas mínimas necesarias para que funcione.
+2. No agregues objetos físicos, obstáculos, trampolines, plataformas, tiendas, mascotas, decoraciones, efectos, mapas, animaciones o sistemas por costumbre del género. Una idea conocida no es una solicitud.
+3. Ejemplo obligatorio: "por cada salto que dé, gana 5 coins" requiere detectar el evento del salto normal y sumar exactamente 5 monedas. No crees un trampolín ni alteres el salto del personaje. No conviertas una acción del jugador en un objeto del mapa.
+4. Si el usuario pide un sistema de programación, prioriza scripts, valores/remotos y UI solo cuando sean parte explícita o soporte indispensable. No reconstruyas ni adornes el escenario por tu cuenta.
+5. Cada acción del plan debe vincularse a una frase de la petición o a una dependencia necesaria. Elimina cualquier acción que no puedas justificar. Ante una ambigüedad importante que no sea imprescindible resolver, conserva el comportamiento actual o pregunta; no inventes.
+6. Conserva las mecánicas, controles, física, objetos y apariencia existentes que no estén dentro del cambio pedido. No borres ni recolorees objetos existentes sin autorización.
+
+REGLA CRÍTICA — COLOR EN CADA NUEVA CREACIÓN VISUAL
+1. Cada Part/estructura nueva debe llevar un color explícito y deliberado, no una selección aleatoria ni el mismo color por defecto en todas las piezas.
+2. Respeta exactamente la paleta que pida el usuario. Si no indicó colores, elige una paleta armónica de 2 a 4 tonos que combine con el tipo de creación, con roles de base, secundario, acento y neutro.
+3. En interfaces, define BackgroundColor3 y TextColor3 de los elementos pertinentes, con contraste y jerarquía. En objetos 3D, usa la propiedad color admitida. En efectos solicitados, coordina su color con la paleta.
+4. No añadas objetos, efectos o interfaces únicamente para poder mostrar colores. Las tareas solo de código no requieren crear decoración.
+5. Los colores por defecto solo se aplican a objetos visuales nuevos. En ediciones, conserva los colores existentes salvo que el usuario pida cambiarlos.
+`;
+
 function taskProfile(message, buildMode) {
   const text = String(message || '');
   const professional = /profesional|professional|top\s*global|AAA|avanzad[oa]|completo|full.game|multijugador|persisten|guardar datos|econom[ií]a|inventario|misiones|sistema[s]?|robusto|escalable|producci[oó]n|arquitectura|depur|debug|error|fall[oa]|repar|arregl|corrig|refactor|optimiza|rendimiento|accesibilidad/i.test(text);
@@ -607,6 +625,25 @@ function validateTreeNode(node, state, depth = 0) {
                  value.every(v => Number.isFinite(Number(v)))) {
         result.properties[key] = value.map(Number);
       }
+    }
+  }
+
+  // Give new visible UI elements a tasteful baseline palette only when the model
+  // omitted colors. Model-specified colors always take precedence.
+  const visualColorDefaults = {
+    Frame: { BackgroundColor3: [25, 34, 52] },
+    ScrollingFrame: { BackgroundColor3: [25, 34, 52] },
+    CanvasGroup: { BackgroundColor3: [25, 34, 52] },
+    TextLabel: { TextColor3: [245, 248, 255], BackgroundTransparency: 1 },
+    TextButton: { BackgroundColor3: [48, 118, 238], TextColor3: [255, 255, 255] },
+    TextBox: { BackgroundColor3: [37, 48, 68], TextColor3: [255, 255, 255] },
+    UIStroke: { Color: [78, 139, 255] }
+  };
+  const visualDefaults = visualColorDefaults[className];
+  if (visualDefaults) {
+    result.properties = result.properties || {};
+    for (const [property, value] of Object.entries(visualDefaults)) {
+      if (result.properties[property] === undefined) result.properties[property] = value;
     }
   }
 
@@ -1920,7 +1957,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   const taskLine = freeBuild
     ? 'PERFIL DE TAREA: ' + task.tier + '. Este modelo es gratis, pero la entrega debe verse profesional. No reduzcas una construcción a pocos bloques ni una interfaz a controles encimados. Usa posiciones, tamaños y jerarquía reales.'
     : 'PERFIL DE TAREA: ' + task.tier + '. Ajusta el alcance a este perfil y devuelve JSON inmediatamente cuando la tarea sea sencilla.';
-  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\n' + taskLine + '\n\n' + UNIVERSAL_EXECUTION_STANDARD + (freeBuild ? '\n\n' + FREE_MODEL_QUALITY_INSTRUCTION : '');
+  const effectiveSystemInstruction = SYSTEM_INSTRUCTION + '\n\n' + INTENT_FIDELITY_AND_VISUAL_INSTRUCTION + '\n\n' + QUALITY_ENGINE_INSTRUCTION + '\n\n' + JSON_CONTRACT_INSTRUCTION + '\n\n' + modelTierInstruction(model) + '\n\n' + taskLine + '\n\n' + UNIVERSAL_EXECUTION_STANDARD + (freeBuild ? '\n\n' + FREE_MODEL_QUALITY_INSTRUCTION : '');
 
   // Respect the selected provider: missing credentials are a clear configuration
   // error, rather than silently running a different provider than the user chose.
