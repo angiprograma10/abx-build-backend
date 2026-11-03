@@ -134,6 +134,70 @@ test('routes MEGA Lite through the director and coordinates the selected special
   }
 });
 
+test('includes strict scope fidelity and intentional color rules in director and specialist prompts', async () => {
+  const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
+  const oldModel = process.env.MEGA_BOOTSTRAP_MODEL;
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'test-model';
+
+  const responses = [
+    {
+      reply: 'Plan de monedas por salto.',
+      projectBrief: 'Alcance: detectar saltos normales y sumar 5 monedas. No crear trampolines.',
+      tasks: [
+        { specialist: 'mega-scripting', task: 'Detecta el salto normal y suma 5 monedas.', dependsOn: [] }
+      ]
+    },
+    { reply: 'Sistema de monedas preparado.', actions: [] }
+  ];
+  const requests = [];
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push(body);
+    const next = responses.shift();
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify(next) }] } }]
+      })
+    };
+  };
+
+  try {
+    await mega.generateMegaResponse({
+      selectedModel: 'mega-lite',
+      message: 'Por cada salto que dé el jugador, gana 5 coins.',
+      history: [],
+      buildMode: 'standard',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+
+    assert.equal(requests.length, 2);
+    const directorSystem = requests[0].systemInstruction.parts[0].text;
+    const specialistSystem = requests[1].systemInstruction.parts[0].text;
+    const specialistTask = requests[1].contents.at(-1).parts[0].text;
+    for (const prompt of [directorSystem, specialistSystem]) {
+      assert.match(prompt, /No agregues mecánicas, objetos, sistemas/);
+      assert.match(prompt, /NO significa crear un trampolín/);
+      assert.match(prompt, /paleta armónica de 2 a 4 colores/);
+    }
+    assert.match(specialistTask, /BLOQUEO DE ALCANCE/);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
+    else process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL;
+    else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
+  }
+});
+
 test('rejects generation clearly when the self-hosted endpoint is missing', async () => {
   const oldUrl = process.env.MEGA_INFERENCE_URL;
   const oldKey = process.env.GEMINI_API_KEY;
