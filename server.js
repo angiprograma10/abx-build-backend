@@ -2358,11 +2358,22 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     });
   } catch (error) {
     if (error && typeof error.code === 'string' && error.code.startsWith('MEGA_')) {
-      console.error('[MEGA_AI] request_failed', error.code, cleanText(error.message, 300));
-      return res.status(Number(error.httpStatus) || 503).json({
+      console.error('[MEGA_AI] request_failed', error.code,
+        Array.isArray(error.failures) ? JSON.stringify(error.failures).slice(0, 500) : '');
+      const publicErrors = {
+        MEGA_QUOTA_EXHAUSTED: 'MEGA está temporalmente ocupado. No se aplicaron cambios en Roblox Studio; inténtalo de nuevo más tarde.',
+        MEGA_INFERENCE_UNAVAILABLE: 'MEGA está atendiendo muchas solicitudes. No se aplicaron cambios en Roblox Studio; vuelve a intentarlo en unos momentos.',
+        MEGA_INFERENCE_CONFIGURATION: 'MEGA no pudo conectarse correctamente con su servicio. Inténtalo más tarde.',
+        MEGA_CONNECTION_FAILED: 'MEGA perdió la conexión con su servicio. No se aplicaron cambios; inténtalo de nuevo.',
+        MEGA_OUTPUT_RETRY_EXHAUSTED: 'MEGA no pudo completar esta solicitud. No se aplicaron cambios en Roblox Studio; inténtalo de nuevo o divide el trabajo en pasos.',
+        MEGA_NOT_CONFIGURED: 'MEGA todavía no está disponible. Inténtalo más tarde.'
+      };
+      const safeMessage = publicErrors[error.code] ||
+        'MEGA no pudo completar esta solicitud. No se aplicaron cambios en Roblox Studio; inténtalo de nuevo.';
+      return res.status(503).json({
         ok: false,
-        code: error.code,
-        error: cleanText(error.message, 500)
+        code: 'MEGA_TEMPORARILY_UNAVAILABLE',
+        error: safeMessage
       });
     }
     if (error.name === 'AbortError') {
