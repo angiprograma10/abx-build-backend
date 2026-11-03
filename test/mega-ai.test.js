@@ -177,16 +177,14 @@ test('includes strict scope fidelity and intentional color rules in director and
       signal: undefined
     });
 
-    assert.equal(requests.length, 2);
-    const directorSystem = requests[0].systemInstruction.parts[0].text;
-    const specialistSystem = requests[1].systemInstruction.parts[0].text;
-    const specialistTask = requests[1].contents.at(-1).parts[0].text;
-    for (const prompt of [directorSystem, specialistSystem]) {
-      assert.match(prompt, /No agregues mecánicas, objetos, sistemas/);
-      assert.match(prompt, /NO significa crear un trampolín/);
-      assert.match(prompt, /paleta armónica de 2 a 4 colores/);
-    }
-    assert.match(specialistTask, /BLOQUEO DE ALCANCE/);
+    assert.equal(requests.length, 1, 'a clear single-domain task should skip the director round trip');
+    const specialistSystem = requests[0].systemInstruction.parts[0].text;
+    const specialistTask = requests[0].contents.at(-1).parts[0].text;
+    assert.match(specialistSystem, /No agregues mecánicas, objetos, sistemas/);
+    assert.match(specialistSystem, /NO significa crear un trampolín/);
+    assert.match(specialistSystem, /paleta armónica de 2 a 4 colores/);
+    assert.match(specialistTask, /PETICIÓN ORIGINAL/);
+    assert.equal(mega.inferFastSpecialist('Por cada salto que dé el jugador, gana 5 coins.'), 'mega-scripting');
   } finally {
     global.fetch = oldFetch;
     if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
@@ -204,7 +202,10 @@ test('retries temporary 503 overloads and automatically switches to a fallback G
     key: process.env.GEMINI_API_KEY,
     primary: process.env.MEGA_BOOTSTRAP_MODEL,
     fallback: process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS,
-    delay: process.env.MEGA_RETRY_BASE_MS
+    delay: process.env.MEGA_RETRY_BASE_MS,
+    liteModel: process.env.MEGA_LITE_MODEL,
+    lite2Model: process.env.MEGA_LITE_2_MODEL,
+    lite35Model: process.env.MEGA_LITE_3_5_MODEL
   };
   const oldFetch = global.fetch;
   delete process.env.MEGA_INFERENCE_URL;
@@ -252,7 +253,10 @@ test('retries temporary 503 overloads and automatically switches to a fallback G
       GEMINI_API_KEY:env.key,
       MEGA_BOOTSTRAP_MODEL:env.primary,
       MEGA_BOOTSTRAP_FALLBACK_MODELS:env.fallback,
-      MEGA_RETRY_BASE_MS:env.delay
+      MEGA_RETRY_BASE_MS:env.delay,
+      MEGA_LITE_MODEL:env.liteModel,
+      MEGA_LITE_2_MODEL:env.lite2Model,
+      MEGA_LITE_3_5_MODEL:env.lite35Model
     })) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
@@ -363,6 +367,92 @@ test('sanitizes final quota and overload errors instead of surfacing provider te
       }
     );
     assert.equal(calls, 3);
+  } finally {
+    global.fetch = oldFetch;
+    for (const [key,value] of Object.entries({
+      MEGA_INFERENCE_URL:env.url,
+      GEMINI_API_KEY:env.key,
+      MEGA_BOOTSTRAP_MODEL:env.primary,
+      MEGA_BOOTSTRAP_FALLBACK_MODELS:env.fallback,
+      MEGA_RETRY_BASE_MS:env.delay
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('runs independent specialists in parallel to reduce MEGA response time', async () => {
+  const env = {
+    url: process.env.MEGA_INFERENCE_URL,
+    key: process.env.GEMINI_API_KEY,
+    primary: process.env.MEGA_BOOTSTRAP_MODEL,
+    fallback: process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS,
+    delay: process.env.MEGA_RETRY_BASE_MS
+  };
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'parallel-test-model';
+  process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS = 'parallel-test-model';
+  process.env.MEGA_RETRY_BASE_MS = '0';
+
+  let active = 0;
+  let maxActive = 0;
+  let callCount = 0;
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    callCount++;
+    const isDirector = body.contents.at(-1).parts[0].text.includes('Analiza esta solicitud como director');
+    if (isDirector) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [{
+            content: {
+              parts: [{
+                text: JSON.stringify({
+                  reply: 'Plan',
+                  projectBrief: 'Trabajo independiente de construcción y UI.',
+                  tasks: [
+                    { specialist: 'mega-build', task: 'Construye el elemento solicitado.', dependsOn: [] },
+                    { specialist: 'mega-ui', task: 'Construye la interfaz solicitada.', dependsOn: [] }
+                  ]
+                })
+              }]
+            }
+          }]
+        })
+      };
+    }
+    active++;
+    maxActive = Math.max(maxActive, active);
+    await new Promise(resolve => setTimeout(resolve, 25));
+    active--;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{
+          content: { parts: [{ text: JSON.stringify({ reply: 'Listo', actions: [] }) }] }
+        }]
+      })
+    };
+  };
+
+  try {
+    const result = await mega.generateMegaResponse({
+      selectedModel: 'mega-lite-2',
+      message: 'Crea una casa y una interfaz de bienvenida',
+      history: [],
+      buildMode: 'standard',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+    assert.equal(result.modelUsed, 'MEGA Lite 2.0');
+    assert.equal(callCount, 3);
+    assert.equal(maxActive, 2, 'both independent specialists should overlap');
   } finally {
     global.fetch = oldFetch;
     for (const [key,value] of Object.entries({
