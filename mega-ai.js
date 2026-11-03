@@ -764,7 +764,7 @@ function inferFastSpecialist(message) {
 }
 
 function isComplexGeometryRequest(message) {
-  return /\\b(casa|vivienda|edificio|castillo|estadio|ciudad|torre|puente|escuela|hospital|tienda|granja|mansión|mansion|mapa|obby|base|interior)\\b/i.test(String(message || ''));
+  return /\b(casa|vivienda|edificio|castillo|estadio|ciudad|torre|puente|escuela|hospital|tienda|granja|mansión|mansion|mapa|obby|base|interior)\b/i.test(String(message || ''));
 }
 
 function analyzeActionGeometry(actions, message) {
@@ -801,7 +801,7 @@ function analyzeActionGeometry(actions, message) {
       duplicateParts: duplicates
     };
     const issues = [];
-    const houseIntent = /\\b(casa|vivienda|mansión|mansion)\\b/i.test(message);
+    const houseIntent = /\b(casa|vivienda|mansión|mansion)\b/i.test(message);
     if (parts.length < (houseIntent ? 14 : 8)) issues.push('Muy pocas piezas para la complejidad solicitada.');
     if (points.length < Math.min(parts.length, houseIntent ? 14 : 8)) issues.push('Muchas piezas no tienen coordenadas XYZ válidas.');
     if (metrics.distinctX < 3 || metrics.spanX < 6) issues.push('La composición casi no ocupa el eje X.');
@@ -1025,14 +1025,14 @@ async function generateMegaResponse({
   for (let pass = 0; pass < qaPasses && (finalParsed.actions.length || geometryDefects); pass++) {
     const passPrompt = 'AUDITORÍA FINAL INTEGRAL: comprueba dependencias, rutas, nombres, compatibilidad, fidelidad exacta a la petición, colores visuales y funcionalidad. Corrige solo defectos concretos. Elimina extras no solicitados. Devuelve las acciones completas, no una explicación.' +
       (geometryDefects
-        ? '\\n\\nDIAGNÓSTICO GEOMÉTRICO MEDIDO: ' + JSON.stringify(geometryReport) +
-          '\\nREPARACIÓN OBLIGATORIA: el borrador no se puede entregar así. Rediseña las acciones geométricas desde cero para corregir todos los defectos medidos. No conserves una fila, cuadrícula plana ni bloques repetidos. Para una casa crea una vivienda con perímetro cerrado, hueco real de entrada, ventanas, puerta, paredes en profundidad y techo por encima; usa CREATE_MODEL_BLUEPRINT con objetos XYZ completos. La geometría debe poder reconocerse sin leer los nombres.'
+        ? '\n\nDIAGNÓSTICO GEOMÉTRICO MEDIDO: ' + JSON.stringify(geometryReport) +
+          '\nREPARACIÓN OBLIGATORIA: el borrador no se puede entregar así. Rediseña las acciones geométricas desde cero para corregir todos los defectos medidos. No conserves una fila, cuadrícula plana ni bloques repetidos. Para una casa crea una vivienda con perímetro cerrado, hueco real de entrada, ventanas, puerta, paredes en profundidad y techo por encima; usa CREATE_MODEL_BLUEPRINT con objetos XYZ completos. La geometría debe poder reconocerse sin leer los nombres.'
         : '');
     const reviewed = await callMegaModel({
       roleId: 'qa',
       messages: specialistMessages('qa', tierSystemInstruction, message,
-        reviewContext + '\\n\\n' + passPrompt +
-        '\\n\\nBORRADOR ACTUAL DE ACCIONES:\\n' + JSON.stringify(finalParsed),
+        reviewContext + '\n\n' + passPrompt +
+        '\n\nBORRADOR ACTUAL DE ACCIONES:\n' + JSON.stringify(finalParsed),
         []),
       signal,
       maxTokens: tier ? tier.qaTokens : 4800,
