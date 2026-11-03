@@ -198,6 +198,186 @@ test('includes strict scope fidelity and intentional color rules in director and
   }
 });
 
+test('retries temporary 503 overloads and automatically switches to a fallback Gemini model', async () => {
+  const env = {
+    url: process.env.MEGA_INFERENCE_URL,
+    key: process.env.GEMINI_API_KEY,
+    primary: process.env.MEGA_BOOTSTRAP_MODEL,
+    fallback: process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS,
+    delay: process.env.MEGA_RETRY_BASE_MS
+  };
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'primary-test-model';
+  process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS = 'backup-test-model';
+  process.env.MEGA_RETRY_BASE_MS = '0';
+  const calls = [];
+  global.fetch = async url => {
+    calls.push(String(url));
+    if (calls.length <= 2) {
+      return {
+        ok: false,
+        status: 503,
+        headers: { get: () => null },
+        json: async () => ({ error: { status: 'UNAVAILABLE', message: 'high demand' } })
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ reply: 'Resuelto con respaldo', actions: [] }) }] } }]
+      })
+    };
+  };
+  try {
+    const result = await mega.generateMegaResponse({
+      selectedModel: 'mega-build',
+      message: 'Analiza una construcción',
+      history: [],
+      buildMode: 'standard',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+    assert.equal(result.reply, 'Resuelto con respaldo');
+    assert.equal(calls.length, 3);
+    assert.match(calls[0], /primary-test-model/);
+    assert.match(calls[1], /primary-test-model/);
+    assert.match(calls[2], /backup-test-model/);
+  } finally {
+    global.fetch = oldFetch;
+    for (const [key,value] of Object.entries({
+      MEGA_INFERENCE_URL:env.url,
+      GEMINI_API_KEY:env.key,
+      MEGA_BOOTSTRAP_MODEL:env.primary,
+      MEGA_BOOTSTRAP_FALLBACK_MODELS:env.fallback,
+      MEGA_RETRY_BASE_MS:env.delay
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('switches model when one Gemini model has exhausted quota', async () => {
+  const env = {
+    url: process.env.MEGA_INFERENCE_URL,
+    key: process.env.GEMINI_API_KEY,
+    primary: process.env.MEGA_BOOTSTRAP_MODEL,
+    fallback: process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS,
+    delay: process.env.MEGA_RETRY_BASE_MS
+  };
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'quota-test-model';
+  process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS = 'available-test-model';
+  process.env.MEGA_RETRY_BASE_MS = '0';
+  const calls = [];
+  global.fetch = async url => {
+    calls.push(String(url));
+    if (calls.length === 1) {
+      return {
+        ok: false,
+        status: 429,
+        headers: { get: () => null },
+        json: async () => ({ error: { status: 'RESOURCE_EXHAUSTED', message: 'You exceeded your current quota. Check your plan and billing details.' } })
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ reply: 'Resuelto con respaldo de cuota', actions: [] }) }] } }]
+      })
+    };
+  };
+  try {
+    const result = await mega.generateMegaResponse({
+      selectedModel: 'mega-build',
+      message: 'Analiza una construcción',
+      history: [],
+      buildMode: 'standard',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+    assert.equal(result.reply, 'Resuelto con respaldo de cuota');
+    assert.equal(calls.length, 2);
+    assert.match(calls[0], /quota-test-model/);
+    assert.match(calls[1], /available-test-model/);
+  } finally {
+    global.fetch = oldFetch;
+    for (const [key,value] of Object.entries({
+      MEGA_INFERENCE_URL:env.url,
+      GEMINI_API_KEY:env.key,
+      MEGA_BOOTSTRAP_MODEL:env.primary,
+      MEGA_BOOTSTRAP_FALLBACK_MODELS:env.fallback,
+      MEGA_RETRY_BASE_MS:env.delay
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('sanitizes final quota and overload errors instead of surfacing provider text', async () => {
+  const env = {
+    url: process.env.MEGA_INFERENCE_URL,
+    key: process.env.GEMINI_API_KEY,
+    primary: process.env.MEGA_BOOTSTRAP_MODEL,
+    fallback: process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS,
+    delay: process.env.MEGA_RETRY_BASE_MS
+  };
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'quota-test-model';
+  process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS = 'backup-1,backup-2';
+  process.env.MEGA_RETRY_BASE_MS = '0';
+  let calls = 0;
+  global.fetch = async () => {
+    calls++;
+    return {
+      ok: false,
+      status: 429,
+      headers: { get: () => null },
+      json: async () => ({ error: { status: 'RESOURCE_EXHAUSTED', message: 'You exceeded your current quota. Check your plan and billing details.' } })
+    };
+  };
+  try {
+    await assert.rejects(
+      () => mega.generateMegaResponse({
+        selectedModel: 'mega-build',
+        message: 'Analiza una construcción',
+        history: [],
+        buildMode: 'standard',
+        systemInstruction: 'Test',
+        signal: undefined
+      }),
+      error => {
+        assert.equal(error.code, 'MEGA_QUOTA_EXHAUSTED');
+        assert.equal(error.message.includes('quota'), false);
+        assert.equal(error.message.includes('billing'), false);
+        return true;
+      }
+    );
+    assert.equal(calls, 3);
+  } finally {
+    global.fetch = oldFetch;
+    for (const [key,value] of Object.entries({
+      MEGA_INFERENCE_URL:env.url,
+      GEMINI_API_KEY:env.key,
+      MEGA_BOOTSTRAP_MODEL:env.primary,
+      MEGA_BOOTSTRAP_FALLBACK_MODELS:env.fallback,
+      MEGA_RETRY_BASE_MS:env.delay
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test('rejects generation clearly when the self-hosted endpoint is missing', async () => {
   const oldUrl = process.env.MEGA_INFERENCE_URL;
   const oldKey = process.env.GEMINI_API_KEY;
