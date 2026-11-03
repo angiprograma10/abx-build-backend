@@ -7,6 +7,7 @@ const MEGA_ROLES = Object.freeze({
     env: 'MEGA_DIRECTOR_MODEL',
     instructions: [
       'Eres MEGA DIRECTOR. Eres el coordinador que convierte una petición grande en tareas verificables para especialistas.',
+      'Nunca pidas al usuario que divida, reduzca o vuelva a formular una petición grande. La descomposición en tareas, fases y entregas es responsabilidad interna de MEGA DIRECTOR; coordina especialistas y presenta una única entrega integrada. Si el alcance supera un límite técnico, reorganiza y compacta internamente antes de responder.',
       'Descompón el proyecto en tareas para mega-build, mega-scripting, mega-ui, mega-fx y mega-gameplay. No delegues tareas que no se necesitan. Detecta primero el estado y las restricciones del proyecto; no asumas que el lugar está vacío.',
       'Ordena las tareas por dependencias reales. Cada tarea debe indicar objetivo, entregables, nombres y rutas compartidos y criterios de aceptación comprobables. Evita duplicados y conflictos entre especialistas.',
       'No generes acciones de Roblox en esta fase. Devuelve solo JSON: {"reply":"resumen breve","projectBrief":"contexto compartido","tasks":[{"specialist":"mega-build","task":"objetivo concreto","dependsOn":[]}]}',
@@ -200,6 +201,7 @@ const QA_INSTRUCTIONS = [
   'Audita cada objeto y mecánica contra la petición original: elimina cualquier elemento que no sea explícito ni una dependencia imprescindible. Un sistema de monedas por salto NO necesita un trampolín; el salto normal del personaje debe conservarse.',
   'Comprueba que todos los objetos visuales nuevos tengan colores explícitos, armónicos y legibles, respetando los colores pedidos. No recolorees objetos existentes sin autorización.',
   'Corrige acciones concretas cuando sea posible. No inventes acciones, propiedades, clases, IDs, assets ni APIs. No cambies lo correcto innecesariamente.',
+  'Nunca pidas al usuario que divida el proyecto o la petición. Si el borrador excede límites o aún tiene defectos, intenta una reparación adicional y una integración interna conservando todos los requisitos explícitos.'
   'Respeta el contrato: {"reply":"...","actions":[...]}. Máximo 30 acciones, 60 piezas por CREATE_STRUCTURE, 300 nodos por CREATE_TREE y 10000 caracteres por script.',
   'Si una parte no se puede implementar con el esquema, conserva lo compatible y dilo en reply. Nunca afirmes que ejecutaste pruebas en Roblox Studio.'
 ].join('\n');
@@ -985,7 +987,7 @@ async function generateMegaResponse({
     for (const result of batchResults) {
       if (result.actions.length > actionLimit ||
           results.reduce((total, item) => total + item.actions.length, 0) + result.actions.length > actionLimit) {
-        const error = new Error('El plan de ' + (tier ? tier.name : 'MEGA') + ' superó su límite de acciones. Divide el proyecto en etapas.');
+        const error = new Error('MEGA no pudo integrar todas las acciones dentro del límite técnico disponible después de la coordinación interna.');
         error.code = 'MEGA_ACTION_LIMIT';
         error.httpStatus = 422;
         throw error;
@@ -1021,11 +1023,15 @@ async function generateMegaResponse({
   const configuredQaPasses = fastSpecialist
     ? 0
     : (tier ? Math.min(2, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
-  const qaPasses = Math.max(configuredQaPasses, geometryDefects ? 1 : 0);
+  const geometryRepairPasses = geometryDefects ? 2 : 0;
+  const qaPasses = Math.max(configuredQaPasses, geometryRepairPasses);
   for (let pass = 0; pass < qaPasses && (finalParsed.actions.length || geometryDefects); pass++) {
+    const currentGeometryReport = analyzeActionGeometry(finalParsed.actions, message);
+    const currentGeometryDefects = currentGeometryReport.some(report => report.issues && report.issues.length);
+    if (geometryDefects && pass > 0 && !currentGeometryDefects) break;
     const passPrompt = 'AUDITORÍA FINAL INTEGRAL: comprueba dependencias, rutas, nombres, compatibilidad, fidelidad exacta a la petición, colores visuales y funcionalidad. Corrige solo defectos concretos. Elimina extras no solicitados. Devuelve las acciones completas, no una explicación.' +
-      (geometryDefects
-        ? '\n\nDIAGNÓSTICO GEOMÉTRICO MEDIDO: ' + JSON.stringify(geometryReport) +
+      (currentGeometryDefects
+        ? '\n\nDIAGNÓSTICO GEOMÉTRICO MEDIDO: ' + JSON.stringify(currentGeometryReport) +
           '\nREPARACIÓN OBLIGATORIA: el borrador no se puede entregar así. Rediseña las acciones geométricas desde cero para corregir todos los defectos medidos. No conserves una fila, cuadrícula plana ni bloques repetidos. Para una casa crea una vivienda con perímetro cerrado, hueco real de entrada, ventanas, puerta, paredes en profundidad y techo por encima; usa CREATE_MODEL_BLUEPRINT con objetos XYZ completos. La geometría debe poder reconocerse sin leer los nombres.'
         : '');
     const reviewed = await callMegaModel({
@@ -1047,6 +1053,7 @@ async function generateMegaResponse({
         actions: reviewed.parsed.actions
       };
     }
+    if (geometryDefects && !analyzeActionGeometry(finalParsed.actions, message).some(report => report.issues && report.issues.length)) break;
   }
 
   if (geometryDefects) {
