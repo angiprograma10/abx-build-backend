@@ -179,3 +179,48 @@ test('repairs malformed and incomplete model output before returning MEGA action
     else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
   }
 });
+
+test('uses a user-friendly failure after all structured-output repairs are exhausted', async () => {
+  const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  let attempts = 0;
+  global.fetch = async () => {
+    attempts++;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: 'texto sin estructura utilizable' }] } }]
+      })
+    };
+  };
+
+  try {
+    await assert.rejects(
+      () => mega.generateMegaResponse({
+        selectedModel: 'mega-build',
+        message: 'Construye una estructura',
+        history: [],
+        buildMode: 'standard',
+        systemInstruction: 'Test',
+        signal: undefined
+      }),
+      error => {
+        assert.equal(error.code, 'MEGA_OUTPUT_RETRY_EXHAUSTED');
+        assert.match(error.message, /MEGA no pudo completar esta solicitud/);
+        assert.equal(error.message.includes('JSON'), false);
+        return true;
+      }
+    );
+    assert.equal(attempts, 3);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
+    else process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldKey;
+  }
+});
