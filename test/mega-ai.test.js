@@ -54,7 +54,10 @@ test('publishes five MEGA specialists and hides internal inference credentials',
     assert.equal(mega.isPaidMegaTier('mega-go'), true);
     assert.equal(mega.isPaidMegaTier('mega-max'), true);
     assert.equal(mega.isPaidMegaTier('mega-lite'), false);
-    assert.equal(mega.getMegaTier('mega-max').qaPasses, 1);
+    assert.equal(mega.getMegaTier('mega-max').qaPasses, 2);
+    assert.ok(mega.getMegaTier('mega-lite').specialistTokens > 3000);
+    assert.ok(mega.getMegaTier('mega-lite-2').specialistTokens > 4200);
+    assert.ok(mega.getMegaTier('mega-lite-3-5').specialistTokens > 5600);
     assert.equal(catalog.some(model => model.id === 'mega-director'), false);
     assert.equal(mega.isMegaModel('mega-director'), true, 'Director remains available internally');
     assert.equal(JSON.stringify(status).includes('test-secret-that-must-not-be-returned'), false);
