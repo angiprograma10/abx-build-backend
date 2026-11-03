@@ -414,24 +414,115 @@ function specialistMessages(roleId, sharedSystemInstruction, message, context, h
   ];
 }
 
+
+function getBootstrapModelCandidates() {
+  const primary = String(
+    process.env.MEGA_BOOTSTRAP_MODEL ||
+    process.env.GEMINI_MODEL ||
+    'gemini-3.8-flash'
+  ).trim();
+  const configuredFallbacks = String(process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS || '')
+    .split(/[;,]/)
+    .map(value => value.trim())
+    .filter(Boolean);
+  const defaults = [
+    'gemini-3.8-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite'
+  ];
+  const fallbacks = configuredFallbacks.length ? configuredFallbacks : defaults;
+  return [...new Set([primary, ...fallbacks].filter(Boolean))].slice(0, 5);
+}
+
+function waitForRetry(delayMs, signal) {
+  if (signal && signal.aborted) {
+    const error = new Error('La solicitud fue cancelada.');
+    error.name = 'AbortError';
+    return Promise.reject(error);
+  }
+  const delay = Math.max(0, Math.min(5000, Number(delayMs) || 0));
+  if (delay === 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (signal) signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, delay);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      const error = new Error('La solicitud fue cancelada.');
+      error.name = 'AbortError';
+      reject(error);
+    };
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function classifyBootstrapFailure(status, payload) {
+  const details = payload && payload.error && typeof payload.error === 'object'
+    ? payload.error
+    : {};
+  const description = [
+    details.status,
+    details.message,
+    JSON.stringify(details.details || ''),
+    payload && payload.message
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  const dailyQuota = status === 429 && (
+    /quota_exceeded|daily quota|current quota|quota.{0,40}(exceed|limit)|(?:exceed|limit).{0,40}quota|requests per day|billing details/.test(description)
+  );
+  const rateLimited = status === 429 && (
+    /rate_limit|per.minute|per.second|requests per minute|tokens per minute|too many requests/.test(description)
+  );
+  return {
+    status,
+    dailyQuota,
+    rateLimited,
+    retryable: status === 408 || status === 429 || status === 500 ||
+      status === 502 || status === 503 || status === 504
+  };
+}
+
+function bootstrapRetryDelay(response, retryIndex) {
+  const configuredBase = Number(process.env.MEGA_RETRY_BASE_MS);
+  const base = Number.isFinite(configuredBase)
+    ? Math.max(0, configuredBase)
+    : 750;
+  const retryAfter = response && response.headers && typeof response.headers.get === 'function'
+    ? response.headers.get('retry-after')
+    : '';
+  const retrySeconds = Number(retryAfter);
+  if (Number.isFinite(retrySeconds) && retrySeconds > 0) {
+    return Math.min(5000, retrySeconds * 1000);
+  }
+  const exponential = Math.min(4000, base * Math.pow(2, retryIndex));
+  return Math.round(exponential * (0.8 + Math.random() * 0.4));
+}
+
 async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, temperature = 0.15 }) {
   const endpoint = getMegaEndpoint();
   const model = roleId === 'qa'
     ? (process.env.MEGA_QA_MODEL || process.env.MEGA_DIRECTOR_MODEL || getMegaBaseModel())
     : getRoleModel(roleId);
 
-  // Temporary runtime: keep the MEGA specialist identities and prompts while
-  // using the configured internal inference key until a dedicated GPU endpoint exists.
+  // Temporary runtime with controlled retries and model failover.
+  // Specialist prompts remain MEGA-owned; only the inference engine is switched.
   if (!endpoint) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      const error = new Error('Los especialistas MEGA están preparados, pero falta conectar el motor de inferencia.');
+      const error = new Error('El servicio de MEGA todavía no está disponible.');
       error.code = 'MEGA_NOT_CONFIGURED';
       error.httpStatus = 503;
       throw error;
     }
 
-    const bootstrapModel = process.env.MEGA_BOOTSTRAP_MODEL || process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+    const models = getBootstrapModelCandidates();
+    let activeModel = '';
+    let lastFailure = null;
+    const failures = [];
+
     const parsed = await requestStructuredOutput({
       messages,
       roleId,
@@ -447,51 +538,110 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
             parts: [{ text: item.content }]
           }));
 
-        let response;
-        try {
-          response = await fetch(
-            'https://generativelanguage.googleapis.com/v1beta/models/' +
-              encodeURIComponent(bootstrapModel) + ':generateContent',
-            {
-              method: 'POST',
-              signal,
-              headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey
-              },
-              body: JSON.stringify({
-                systemInstruction: { parts: [{ text: systemText }] },
-                contents,
-                generationConfig: {
-                  responseMimeType: 'application/json',
-                  temperature: attempt === 0 ? temperature : 0.05,
-                  maxOutputTokens: Math.min(12000, Math.max(maxTokens, Math.round(maxTokens * (attempt + 1) * 0.75)))
-                }
-              })
+        // Prefer the model that already succeeded in this specialist call.
+        const orderedModels = activeModel
+          ? [activeModel, ...models.filter(candidate => candidate !== activeModel)]
+          : models;
+
+        for (const candidateModel of orderedModels) {
+          const sameModelRetries = 1;
+          for (let retry = 0; retry <= sameModelRetries; retry++) {
+            if (signal && signal.aborted) {
+              const aborted = new Error('La solicitud fue cancelada.');
+              aborted.name = 'AbortError';
+              throw aborted;
             }
-          );
-        } catch (cause) {
-          const error = new Error('No se pudo conectar con el motor de inferencia de MEGA. Revisa la conexión del backend.');
-          error.code = 'MEGA_CONNECTION_FAILED';
-          error.httpStatus = 503;
-          error.cause = cause;
-          throw error;
+
+            let response;
+            try {
+              response = await fetch(
+                'https://generativelanguage.googleapis.com/v1beta/models/' +
+                  encodeURIComponent(candidateModel) + ':generateContent',
+                {
+                  method: 'POST',
+                  signal,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiKey
+                  },
+                  body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: systemText }] },
+                    contents,
+                    generationConfig: {
+                      responseMimeType: 'application/json',
+                      temperature: attempt === 0 ? temperature : 0.05,
+                      maxOutputTokens: Math.min(12000, Math.max(maxTokens, Math.round(maxTokens * (attempt + 1) * 0.75)))
+                    }
+                  })
+                }
+              );
+            } catch (cause) {
+              if (cause && cause.name === 'AbortError') throw cause;
+              lastFailure = { status: 503, dailyQuota: false, network: true };
+              failures.push({ model: candidateModel, status: 503, network: true });
+              if (retry < sameModelRetries) {
+                await waitForRetry(bootstrapRetryDelay(null, retry), signal);
+                continue;
+              }
+              break;
+            }
+
+            const payload = await response.json().catch(() => ({}));
+            if (response.ok) {
+              activeModel = candidateModel;
+              return payload?.candidates?.[0]?.content?.parts
+                ?.map(part => typeof part.text === 'string' ? part.text : '')
+                .join('') || '';
+            }
+
+            const failure = classifyBootstrapFailure(response.status, payload);
+            lastFailure = failure;
+            failures.push({ model: candidateModel, status: response.status, dailyQuota: failure.dailyQuota });
+
+            // Do not retry a hard daily quota/billing exhaustion; a different model
+            // may still have separate available capacity, so continue failover.
+            if (!failure.retryable || response.status === 401 || response.status === 403 ||
+                response.status === 402 || response.status === 400) {
+              if (response.status === 401 || response.status === 403 || response.status === 402 || response.status === 400) {
+                const error = new Error('El servicio de MEGA no pudo autorizar esta solicitud.');
+                error.code = 'MEGA_INFERENCE_CONFIGURATION';
+                error.httpStatus = 503;
+                throw error;
+              }
+              break;
+            }
+
+            const shouldRetrySameModel = retry < sameModelRetries &&
+              !failure.dailyQuota;
+            if (shouldRetrySameModel) {
+              await waitForRetry(bootstrapRetryDelay(response, retry), signal);
+              continue;
+            }
+            break;
+          }
         }
 
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          const detail = String(payload?.error?.message || payload?.message || '').slice(0, 220);
-          const error = new Error('El motor de inferencia de MEGA rechazó la solicitud (HTTP ' + response.status + '). ' + detail);
-          error.code = 'MEGA_INFERENCE_HTTP_ERROR';
-          error.httpStatus = response.status === 429 ? 429 : 502;
-          throw error;
-        }
-        return payload?.candidates?.[0]?.content?.parts
-          ?.map(part => typeof part.text === 'string' ? part.text : '')
-          .join('') || '';
+        const allQuotaLimited = failures.length > 0 &&
+          failures.every(item => item.dailyQuota);
+        const allUnavailable = failures.length > 0 &&
+          failures.every(item => item.status === 503 || item.status === 502 || item.status === 504 || item.network);
+        const error = new Error(allQuotaLimited
+          ? 'MEGA alcanzó temporalmente el límite de uso disponible.'
+          : allUnavailable
+            ? 'MEGA está recibiendo muchas solicitudes y no pudo completar esta operación.'
+            : 'MEGA no pudo obtener una respuesta de sus motores disponibles.');
+        error.code = allQuotaLimited ? 'MEGA_QUOTA_EXHAUSTED' : 'MEGA_INFERENCE_UNAVAILABLE';
+        error.httpStatus = 503;
+        error.failures = failures;
+        throw error;
       }
     });
-    return { parsed, model: 'MEGA_TEMPORARY_BASE' };
+
+    return {
+      parsed,
+      model: 'MEGA_TEMPORARY_BASE',
+      inferenceModel: activeModel
+    };
   }
 
   const headers = { 'Content-Type': 'application/json' };
