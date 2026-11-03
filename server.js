@@ -2380,8 +2380,9 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
         MEGA_INFERENCE_UNAVAILABLE: 'MEGA está atendiendo muchas solicitudes. No se aplicaron cambios en Roblox Studio; vuelve a intentarlo en unos momentos.',
         MEGA_INFERENCE_CONFIGURATION: 'MEGA no pudo conectarse correctamente con su servicio. Inténtalo más tarde.',
         MEGA_CONNECTION_FAILED: 'MEGA perdió la conexión con su servicio. No se aplicaron cambios; inténtalo de nuevo.',
-        MEGA_OUTPUT_RETRY_EXHAUSTED: 'MEGA no pudo completar esta solicitud. No se aplicaron cambios en Roblox Studio; inténtalo de nuevo o divide el trabajo en pasos.',
-        MEGA_GEOMETRY_QUALITY_FAILED: 'No envié una construcción mal formada a Roblox Studio. Prueba con una descripción de estilo o divide el modelo en partes.',
+        MEGA_OUTPUT_RETRY_EXHAUSTED: 'MEGA no pudo completar esta solicitud después de reparar internamente la respuesta. No se aplicaron cambios en Roblox Studio; inténtalo de nuevo.',
+        MEGA_ACTION_LIMIT: 'MEGA no pudo integrar todas las acciones dentro del límite técnico disponible. No se aplicaron cambios en Roblox Studio; inténtalo de nuevo con MEGA DIRECTOR.',
+        MEGA_GEOMETRY_QUALITY_FAILED: 'MEGA no pudo verificar una geometría suficientemente correcta después de sus revisiones internas. No se envió una construcción defectuosa a Roblox Studio.'
         MEGA_NOT_CONFIGURED: 'MEGA todavía no está disponible. Inténtalo más tarde.'
       };
       const safeMessage = publicErrors[error.code] ||
