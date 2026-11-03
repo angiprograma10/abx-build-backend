@@ -44,7 +44,7 @@ export MEGA_MAX_MODEL_LEN="8192"
 bash inference/serve.sh
 ```
 
-El servidor expone una API compatible con OpenAI en `/v1/chat/completions`, con el modelo servido como `mega-base`.
+El lanzador utiliza `--language-model-only`: MEGA trabaja con instrucciones de texto para Roblox Studio y no necesita cargar los módulos de imagen/video del modelo base. Esto reduce memoria frente a cargar el modo multimodal completo. El servidor expone una API compatible con OpenAI en `/v1/chat/completions`, con el modelo servido como `mega-base`.
 
 Prueba local:
 
