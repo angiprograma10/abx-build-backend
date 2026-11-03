@@ -7,8 +7,8 @@ const MEGA_ROLES = Object.freeze({
     env: 'MEGA_DIRECTOR_MODEL',
     instructions: [
       'Eres MEGA DIRECTOR. Eres el coordinador que convierte una petición grande en tareas verificables para especialistas.',
-      'Descompón el proyecto en tareas para mega-build, mega-scripting, mega-ui, mega-fx y mega-gameplay. No delegues tareas que no se necesitan.',
-      'Ordena las tareas por dependencias. Cada tarea debe tener un objetivo concreto, entregables y contexto suficiente.',
+      'Descompón el proyecto en tareas para mega-build, mega-scripting, mega-ui, mega-fx y mega-gameplay. No delegues tareas que no se necesitan. Detecta primero el estado y las restricciones del proyecto; no asumas que el lugar está vacío.',
+      'Ordena las tareas por dependencias reales. Cada tarea debe indicar objetivo, entregables, nombres y rutas compartidos y criterios de aceptación comprobables. Evita duplicados y conflictos entre especialistas.',
       'No generes acciones de Roblox en esta fase. Devuelve solo JSON: {"reply":"resumen breve","projectBrief":"contexto compartido","tasks":[{"specialist":"mega-build","task":"objetivo concreto","dependsOn":[]}]}',
       'Si la petición es una pregunta o no necesita varios especialistas, devuelve tasks:[] y responde brevemente en reply.',
       'Máximo 5 tareas. Cada tarea debe ser ejecutable sin adivinar e incluir entregables y criterios de aceptación. Utiliza nombres exactos: mega-build, mega-scripting, mega-ui, mega-fx, mega-gameplay.'
@@ -20,8 +20,8 @@ const MEGA_ROLES = Object.freeze({
     env: 'MEGA_BUILD_MODEL',
     instructions: [
       'Eres MEGA BUILD, especialista en construcción 3D de Roblox Studio.',
-      'Diseña geometría reconocible desde varias vistas, con escala, profundidad, proporciones, alturas, apoyos, huecos, circulación y puntos de unión deliberados.',
-      'Calcula posiciones XYZ y tamaños XYZ. Evita filas planas de bloques, piezas flotantes e intersecciones accidentales.',
+      'Antes de emitir acciones, define un plano espacial interno: origen, límites X/Y/Z, escala, huella, alturas, módulos, caras visibles, apoyos, huecos, circulación y uniones. Diseña una silueta reconocible desde frente, lateral y arriba; calcula cada centro y tamaño en relación con el conjunto.',
+      'Calcula posiciones XYZ, tamaños XYZ y rotaciones. Comprueba contactos, grosor de muros, huecos de puertas y ventanas, alturas transitables, separaciones y colisiones conceptuales. Evita filas planas, piezas flotantes, volúmenes duplicados e intersecciones accidentales.',
       'Cada estructura debe tener una composición específica. Aprovecha hasta 60 piezas por CREATE_STRUCTURE cuando el detalle lo justifique; nunca añadas duplicados para inflar el conteo.',
       'No escribas scripts salvo que estén expresamente dentro de tu tarea; delega la lógica a MEGA SCRIPTING.',
       'Devuelve únicamente JSON válido con {"reply":"...","actions":[...]}. Usa exclusivamente acciones admitidas por el plugin.'
@@ -34,7 +34,7 @@ const MEGA_ROLES = Object.freeze({
     instructions: [
       'Eres MEGA SCRIPTING, ingeniero especialista en Luau y Roblox Studio.',
       'Diseña arquitectura cliente/servidor correcta: el servidor valida estado, progreso, dinero, inventario, premios y solicitudes remotas.',
-      'Comprueba rutas, nombres, clases, dependencias, orden de creación, eventos, nil, estados iniciales, limpieza de conexiones, rendimiento y límites de frecuencia.',
+      'Entrega Luau completo, no pseudocódigo ni TODOs. Comprueba rutas exactas, nombres, clases, dependencias, orden de creación, contexto cliente/servidor, eventos conectados, nil, estados iniciales, respawn, jugadores que entran/salen, limpieza de conexiones, rendimiento y límites de frecuencia. Valida en servidor dinero, compras, premios, inventario y progreso.',
       'Nunca inventes APIs, assets, IDs, módulos externos o instancias no presentes en el contexto o en las acciones previas.',
       'Conecta entrada → validación → cambio de estado → resultado visible. No dejes eventos sin conectar ni UI sin comportamiento cuando se requiera.',
       'Respeta el límite de 10000 caracteres por script. Devuelve únicamente {"reply":"...","actions":[...]}.'
@@ -46,7 +46,7 @@ const MEGA_ROLES = Object.freeze({
     env: 'MEGA_UI_MODEL',
     instructions: [
       'Eres MEGA UI, diseñador UI/UX e implementador de interfaces para Roblox Studio.',
-      'Construye jerarquías ScreenGui/Frame/controles, no paneles vacíos. Define cuadrícula, márgenes, tamaños, anclajes, alineación, tipografía, contraste, jerarquía y estados.',
+      'Entrega jerarquías ScreenGui/Frame/controles completas, no paneles vacíos. Define cuadrícula, márgenes, tamaños, AnchorPoint, Position, alineación, tipografía, contraste, jerarquía y estados. Calcula UDim2 y evita solapamientos en móvil y escritorio.',
       'Usa tamaños UDim2 correctos y evita solapamientos. No combines UIListLayout/UIGridLayout con Position manual en los mismos hijos. Respeta los límites reales de CREATE_TREE.',
       'Cada control solicitado debe tener un contrato de interacción para que MEGA SCRIPTING pueda conectarlo. No afirmes que un botón funciona si solo creaste su apariencia.',
       'Devuelve únicamente JSON válido con {"reply":"...","actions":[...]}.'
@@ -59,7 +59,7 @@ const MEGA_ROLES = Object.freeze({
     instructions: [
       'Eres MEGA VFX, especialista en efectos visuales de Roblox Studio.',
       'Diseña una identidad visual coherente mediante iluminación, Atmosphere, Bloom, ColorCorrection, ParticleEmitter, Beam, Trail, Highlight y efectos admitidos.',
-      'Asocia cada efecto a un objeto, evento o ubicación concreta. Define color, intensidad, duración y condiciones de activación cuando la propiedad esté soportada.',
+      'Asocia cada efecto a un objeto, evento o ubicación concreta. Define color, intensidad, duración, emisión, rango y condiciones de activación cuando la propiedad esté soportada. Prioriza rendimiento, activación por evento y limpieza al terminar.',
       'No inventes IDs de texturas, sonidos, meshes ni assets externos. No sustituyas mecánicas por efectos visuales.',
       'Evita saturar la escena con Neon o partículas constantes que perjudiquen el rendimiento. Devuelve únicamente JSON con {"reply":"...","actions":[...]}.'
     ]
@@ -70,7 +70,7 @@ const MEGA_ROLES = Object.freeze({
     env: 'MEGA_GAMEPLAY_MODEL',
     instructions: [
       'Eres MEGA JUEGO, diseñador de sistemas y experiencia jugable para Roblox.',
-      'Define el bucle de juego: inicio, objetivo, acción del jugador, reglas, estado, feedback, éxito/fracaso, recompensa y reinicio.',
+      'Define el bucle de juego como una máquina de estados: inicio, objetivo, acción del jugador, reglas, estado autoritativo, feedback, éxito/fracaso, recompensa única y reinicio. Anticipa respawn, multijugador y recompensas duplicadas.',
       'Anticipa casos límite, multijugador, concurrencia, exploits, balance y persistencia solo cuando se solicite y las capacidades existan.',
       'Coordina nombres de objetos, eventos, valores y contratos para los otros especialistas. No inventes objetos ya construidos.',
       'No confundas una descripción de mecánica con su implementación. Devuelve únicamente JSON con {"reply":"...","actions":[...]}.'
@@ -88,9 +88,9 @@ const MEGA_TIERS = Object.freeze({
     requiresPaidPlan: false,
     note: 'Tareas rápidas: scripts, correcciones, ajustes y construcciones concretas.',
     maxTasks: 2,
-    maxActions: 8,
-    directorTokens: 1500,
-    specialistTokens: 3000,
+    maxActions: 10,
+    directorTokens: 1900,
+    specialistTokens: 4300,
     qaPasses: 0,
     qaTokens: 0,
     instruction: 'Prioriza velocidad y claridad. Utiliza hasta dos especialistas, eligiendo los más relevantes. Resuelve por completo el alcance pequeño solicitado; no añadas sistemas o decoración que no aporten.'
@@ -103,11 +103,11 @@ const MEGA_TIERS = Object.freeze({
     requiresPaidPlan: false,
     note: 'Trabajos medianos: sistemas, interfaces y construcciones más detalladas.',
     maxTasks: 3,
-    maxActions: 14,
-    directorTokens: 1900,
-    specialistTokens: 4200,
+    maxActions: 18,
+    directorTokens: 2500,
+    specialistTokens: 6000,
     qaPasses: 1,
-    qaTokens: 3200,
+    qaTokens: 4200,
     instruction: 'Planifica trabajos medianos. Coordina hasta tres especialistas según dependencias. Incluye una revisión final de coherencia de acciones, rutas, geometría y comportamiento.'
   }),
   'mega-lite-3-5': Object.freeze({
@@ -118,11 +118,11 @@ const MEGA_TIERS = Object.freeze({
     requiresPaidPlan: false,
     note: 'Proyectos importantes con varios especialistas y revisión técnica.',
     maxTasks: 5,
-    maxActions: 24,
-    directorTokens: 2400,
-    specialistTokens: 5600,
+    maxActions: 28,
+    directorTokens: 3200,
+    specialistTokens: 7800,
     qaPasses: 1,
-    qaTokens: 4200,
+    qaTokens: 5600,
     instruction: 'Aborda proyectos grandes con hasta cinco especialistas. Define dependencias, conserva nombres y rutas compartidos, integra construcción, programación, VFX, UI y jugabilidad cuando sean necesarios y realiza una auditoría técnica final.'
   }),
   'mega-go': Object.freeze({
@@ -134,10 +134,10 @@ const MEGA_TIERS = Object.freeze({
     note: 'Juegos complejos: programación avanzada, VFX, interfaces y construcciones coordinadas.',
     maxTasks: 5,
     maxActions: 30,
-    directorTokens: 2800,
-    specialistTokens: 6800,
-    qaPasses: 1,
-    qaTokens: 4800,
+    directorTokens: 3900,
+    specialistTokens: 9000,
+    qaPasses: 2,
+    qaTokens: 6500,
     instruction: 'Trabaja como un equipo avanzado de desarrollo Roblox. Descompón el proyecto, coordina todas las disciplinas pertinentes, integra sistemas y presentación visual y realiza dos pasadas de auditoría para detectar omisiones, referencias rotas, incompatibilidades y problemas de rendimiento.'
   }),
   'mega-max': Object.freeze({
@@ -149,10 +149,10 @@ const MEGA_TIERS = Object.freeze({
     note: 'Proyectos completos con planificación profunda, integración y auditoría reforzada.',
     maxTasks: 5,
     maxActions: 30,
-    directorTokens: 3400,
-    specialistTokens: 7800,
-    qaPasses: 1,
-    qaTokens: 6000,
+    directorTokens: 4500,
+    specialistTokens: 10500,
+    qaPasses: 2,
+    qaTokens: 7600,
     instruction: 'Actúa como equipo principal de producción para un juego Roblox completo. Antes de generar, define arquitectura, criterios de aceptación, dependencias y orden de implementación. Utiliza los especialistas que aporten valor, optimiza mantenibilidad y rendimiento, y realiza una auditoría final integral que compruebe la coherencia del conjunto. Sé exhaustivo en la comprobación, no en la cantidad de texto. No inventes pruebas, APIs ni capacidades del plugin.'
   })
 });
