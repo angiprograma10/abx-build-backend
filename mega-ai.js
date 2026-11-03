@@ -201,7 +201,7 @@ const QA_INSTRUCTIONS = [
   'Audita cada objeto y mecánica contra la petición original: elimina cualquier elemento que no sea explícito ni una dependencia imprescindible. Un sistema de monedas por salto NO necesita un trampolín; el salto normal del personaje debe conservarse.',
   'Comprueba que todos los objetos visuales nuevos tengan colores explícitos, armónicos y legibles, respetando los colores pedidos. No recolorees objetos existentes sin autorización.',
   'Corrige acciones concretas cuando sea posible. No inventes acciones, propiedades, clases, IDs, assets ni APIs. No cambies lo correcto innecesariamente.',
-  'Nunca pidas al usuario que divida el proyecto o la petición. Si el borrador excede límites o aún tiene defectos, intenta una reparación adicional y una integración interna conservando todos los requisitos explícitos.'
+  'Nunca pidas al usuario que divida el proyecto o la petición. Si el borrador excede límites o aún tiene defectos, intenta una reparación adicional y una integración interna conservando todos los requisitos explícitos.',
   'Respeta el contrato: {"reply":"...","actions":[...]}. Máximo 30 acciones, 60 piezas por CREATE_STRUCTURE, 300 nodos por CREATE_TREE y 10000 caracteres por script.',
   'Si una parte no se puede implementar con el esquema, conserva lo compatible y dilo en reply. Nunca afirmes que ejecutaste pruebas en Roblox Studio.'
 ].join('\n');
