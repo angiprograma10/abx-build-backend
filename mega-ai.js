@@ -169,9 +169,28 @@ const SPECIALIST_IDS = Object.freeze([
   'mega-build', 'mega-scripting', 'mega-ui', 'mega-fx', 'mega-gameplay'
 ]);
 
+
+const MEGA_INTENT_AND_VISUAL_RULES = [
+  'FIDELIDAD A LA PETICIÓN: cumple exactamente lo que pidió el usuario. No agregues mecánicas, objetos, sistemas, obstáculos, decoraciones, escenarios, recompensas, animaciones ni efectos que no haya solicitado.',
+  'Separa mentalmente: (1) requisitos explícitos del usuario; (2) elementos de soporte estrictamente necesarios para que esos requisitos funcionen; (3) extras opcionales. Implementa solo (1) y el mínimo indispensable de (2). La categoría (3) siempre queda fuera, aunque sea común en ese género de juego.',
+  'No confundas una palabra de una mecánica con una instrucción para construir un objeto. Ejemplo obligatorio: "por cada salto que dé el jugador, gana 5 monedas" significa detectar el salto normal del personaje y sumar exactamente 5 a su moneda; NO significa crear un trampolín, una plataforma de salto, un power-up, un resorte ni cambiar la física del salto.',
+  'Otro ejemplo: "ganar monedas al correr" requiere detectar la acción de correr y otorgar la recompensa; no agregues una pista, vehículo, tienda, mascota ni mapa nuevo salvo que se solicite.',
+  'No interpretes "haz un sistema", "programa", "corrige" o "mejora" como permiso para rediseñar el resto del juego. Si el usuario pide solo código, no crees piezas, escenarios o UI salvo el soporte estrictamente necesario.',
+  'Antes de generar, prepara una lista interna de aceptación. Cada acción debe corresponder a un requisito explícito o a una dependencia indispensable claramente justificable. Si no puedes explicar por qué un objeto o sistema es necesario, no lo crees.',
+  'Respeta las negaciones, exclusiones, restricciones y el estado existente del proyecto con prioridad máxima. No cambies mecánicas, controles, físicas, nombres, colores u objetos existentes fuera del alcance pedido.',
+  'Si una decisión importante no está especificada y no es indispensable, no la inventes: conserva el comportamiento existente o pregunta brevemente antes de añadirla. Los valores técnicos menores pueden usar defaults conservadores.',
+  'ACABADO VISUAL Y COLOR: toda nueva creación que sea visible debe tener color intencional, coherente con lo solicitado y con el propósito del objeto. Si el usuario especifica colores, usa esos colores y no los sustituyas. Si no especifica una paleta, elige una paleta armónica de 2 a 4 colores basada en el tema y aplica roles consistentes: principal, secundario, acento y neutro.',
+  'En CREATE_PART y CREATE_STRUCTURE asigna color explícito a cada pieza usando únicamente colores admitidos. No dejes todas las piezas con el mismo color por descuido; diferencia estructura, detalles y elementos interactivos con una paleta deliberada.',
+  'En CREATE_TREE aplica BackgroundColor3, TextColor3, Color o ImageColor3 a los elementos visuales pertinentes, según sus clases y las propiedades admitidas. Mantén contraste legible y evita texto oscuro sobre fondo oscuro o texto claro sobre fondo claro.',
+  'En VFX, si el usuario pidió efectos, coordina sus colores con la misma paleta. No agregues VFX, luces, partículas ni cambios de iluminación solo para decorar una petición de programación.',
+  'Los defaults de color solo aplican a objetos visuales nuevos. Nunca recolorees objetos existentes durante una reparación o edición si el usuario no pidió cambiar su apariencia. No agregues objetos visuales a una tarea que solo requiere lógica.'
+];
+
 const QA_INSTRUCTIONS = [
   'Eres MEGA QA, el integrador y auditor final de un proyecto Roblox.',
   'Comprueba compatibilidad de acciones, coincidencia de nombres y rutas, orden de dependencias, contratos entre UI y lógica y omisiones importantes.',
+  'Audita cada objeto y mecánica contra la petición original: elimina cualquier elemento que no sea explícito ni una dependencia imprescindible. Un sistema de monedas por salto NO necesita un trampolín; el salto normal del personaje debe conservarse.',
+  'Comprueba que todos los objetos visuales nuevos tengan colores explícitos, armónicos y legibles, respetando los colores pedidos. No recolorees objetos existentes sin autorización.',
   'Corrige acciones concretas cuando sea posible. No inventes acciones, propiedades, clases, IDs, assets ni APIs. No cambies lo correcto innecesariamente.',
   'Respeta el contrato: {"reply":"...","actions":[...]}. Máximo 30 acciones, 60 piezas por CREATE_STRUCTURE, 300 nodos por CREATE_TREE y 10000 caracteres por script.',
   'Si una parte no se puede implementar con el esquema, conserva lo compatible y dilo en reply. Nunca afirmes que ejecutaste pruebas en Roblox Studio.'
@@ -374,9 +393,10 @@ function normalizeHistory(history) {
 }
 
 function roleSystemPrompt(roleId, sharedSystemInstruction) {
-  if (roleId === 'qa') return sharedSystemInstruction + '\n\n' + QA_INSTRUCTIONS;
+  const common = MEGA_INTENT_AND_VISUAL_RULES.join('\n');
+  if (roleId === 'qa') return sharedSystemInstruction + '\n\n' + common + '\n\n' + QA_INSTRUCTIONS;
   const role = MEGA_ROLES[roleId];
-  return sharedSystemInstruction + '\n\n' + role.instructions.join('\n');
+  return sharedSystemInstruction + '\n\n' + common + '\n\n' + role.instructions.join('\n');
 }
 
 function specialistMessages(roleId, sharedSystemInstruction, message, context, history) {
@@ -637,7 +657,7 @@ async function generateMegaResponse({
       'TAREA ASIGNADA A ' + task.specialist.toUpperCase() + ':\n' + task.task,
       task.dependsOn.length ? 'DEPENDENCIAS DECLARADAS: ' + task.dependsOn.join(', ') : '',
       previousContext.length ? 'ENTREGAS ANTERIORES DE OTROS ESPECIALISTAS:\n' + JSON.stringify(previousContext).slice(0, 14000) : '',
-      'No contradigas las entregas previas. Conserva exactamente los nombres y rutas compartidos.'
+      'BLOQUEO DE ALCANCE: implementa solo los requisitos explícitos y el soporte mínimo indispensable; no inventes extras. No cambies el comportamiento normal del jugador si no se pidió. Conserva exactamente los nombres y rutas compartidos.'
     ].filter(Boolean).join('\n\n');
 
     const generated = await callMegaModel({
