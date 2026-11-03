@@ -2343,10 +2343,12 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
       };
     }
 
-    const responseReply = actions.length > 1
-      ? cleanText(reply + ' Plan de ' + actions.length +
-          ' acciones en orden; al confirmar la primera acción, el plugin encolará el plan completo.', 3500)
-      : reply;
+    const responseReply = usedProvider === 'mega'
+      ? cleanText(reply, 650)
+      : actions.length > 1
+        ? cleanText(reply + ' Plan de ' + actions.length +
+            ' acciones en orden; al confirmar la primera acción, el plugin encolará el plan completo.', 3500)
+        : reply;
 
     const tokenCost = ({ 'gemini-3.8-flash': 2, 'gemini-3.1-pro-preview': 3 })[usedModel] || 0;
     const usage = spendDailyToken(clientId, tokenCost);
@@ -2379,6 +2381,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
         MEGA_INFERENCE_CONFIGURATION: 'MEGA no pudo conectarse correctamente con su servicio. Inténtalo más tarde.',
         MEGA_CONNECTION_FAILED: 'MEGA perdió la conexión con su servicio. No se aplicaron cambios; inténtalo de nuevo.',
         MEGA_OUTPUT_RETRY_EXHAUSTED: 'MEGA no pudo completar esta solicitud. No se aplicaron cambios en Roblox Studio; inténtalo de nuevo o divide el trabajo en pasos.',
+        MEGA_GEOMETRY_QUALITY_FAILED: 'No envié una construcción mal formada a Roblox Studio. Prueba con una descripción de estilo o divide el modelo en partes.',
         MEGA_NOT_CONFIGURED: 'MEGA todavía no está disponible. Inténtalo más tarde.'
       };
       const safeMessage = publicErrors[error.code] ||
