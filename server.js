@@ -3,6 +3,7 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const { isMegaModel, getMegaCatalog, getMegaStatus, generateMegaResponse } = require('./mega-ai');
 
 const app = express();
 app.disable('x-powered-by');
@@ -84,6 +85,7 @@ const ALLOWED_DEEPSEEK_MODELS = new Set();
 const ALLOWED_GROQ_MODELS = new Set();
 const ALLOWED_MISTRAL_MODELS = new Set();
 function providerForModel(model) {
+  if (isMegaModel(model)) return 'mega';
   if (ALLOWED_OPENAI_MODELS.has(model)) return 'openai';
   if (ALLOWED_DEEPSEEK_MODELS.has(model)) return 'deepseek';
   if (ALLOWED_GROQ_MODELS.has(model)) return 'groq';
@@ -984,12 +986,14 @@ app.use(express.json({
 app.use(rateLimit(CONFIG.maxRequestsPerMinute));
 
 app.get('/', (_req, res) => {
+  const megaStatus = getMegaStatus();
   res.json({
     ok: true,
-    service: 'ABX Build Backend',
-    version: '3.0.0-beta.1',
-    aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY || DEEPSEEK_API_KEY || GROQ_API_KEY || MISTRAL_API_KEY),
+    service: 'MEGA AI Backend',
+    version: '4.0.0-alpha.1',
+    aiConfigured: Boolean(megaStatus.configured || GEMINI_API_KEY || OPENAI_API_KEY || DEEPSEEK_API_KEY || GROQ_API_KEY || MISTRAL_API_KEY),
     providers: {
+      mega: megaStatus.configured,
       gemini: Boolean(GEMINI_API_KEY),
       openai: Boolean(OPENAI_API_KEY),
       deepseek: Boolean(DEEPSEEK_API_KEY),
@@ -998,7 +1002,7 @@ app.get('/', (_req, res) => {
     },
     features: [
       'session-queue', 'action-validation',
-      'roblox-create-edit-inspect', 'gemini-chat', 'openai-responses',
+      'roblox-create-edit-inspect', 'mega-specialist-models', 'mega-director-orchestration', 'self-hosted-inference', 'gemini-chat', 'openai-responses',
       'deepseek-responses', 'groq-chat-completions', 'mistral-chat-completions',
       'daily-token-quota', 'provider-availability', 'robust-json-extraction'
     ]
@@ -1006,12 +1010,14 @@ app.get('/', (_req, res) => {
 });
 
 app.get('/health', (_req, res) => {
+  const megaStatus = getMegaStatus();
   res.json({
     ok: true,
     uptime: Math.floor(process.uptime()),
     activeSessions: sessions.size,
-    aiConfigured: Boolean(GEMINI_API_KEY || OPENAI_API_KEY || DEEPSEEK_API_KEY || GROQ_API_KEY || MISTRAL_API_KEY),
+    aiConfigured: Boolean(megaStatus.configured || GEMINI_API_KEY || OPENAI_API_KEY || DEEPSEEK_API_KEY || GROQ_API_KEY || MISTRAL_API_KEY),
     providers: {
+      mega: megaStatus.configured,
       gemini: Boolean(GEMINI_API_KEY),
       openai: Boolean(OPENAI_API_KEY),
       deepseek: Boolean(DEEPSEEK_API_KEY),
@@ -1044,6 +1050,10 @@ app.post('/register', rateLimit(20), (req, res) => {
 
   sessions.set(code, makeSession());
   res.json({ ok: true, code });
+});
+
+app.get('/mega/status', rateLimit(30), (_req, res) => {
+  res.json({ ok: true, ...getMegaStatus() });
 });
 
 app.post('/usage', rateLimit(60), (req, res) => {
@@ -1878,7 +1888,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   const requestedModel = cleanText(req.body?.model, 80);
   const envModel = cleanText(DEFAULT_MODEL, 80);
   const openaiEnvModel = cleanText(DEFAULT_OPENAI_MODEL, 80);
-  const validRequested = ALLOWED_MODELS.has(requestedModel) ||
+  const validRequested = isMegaModel(requestedModel) || ALLOWED_MODELS.has(requestedModel) ||
     ALLOWED_OPENAI_MODELS.has(requestedModel) ||
     ALLOWED_DEEPSEEK_MODELS.has(requestedModel) ||
     ALLOWED_GROQ_MODELS.has(requestedModel) ||
@@ -1906,7 +1916,15 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
 
   // Respect the selected provider: missing credentials are a clear configuration
   // error, rather than silently running a different provider than the user chose.
-  if (!apiKeyForProvider(selectedProvider)) {
+  if (selectedProvider === 'mega' && !getMegaStatus().configured) {
+    return res.status(503).json({
+      ok: false,
+      code: 'MEGA_INFERENCE_NOT_CONFIGURED',
+      error: 'Los modelos MEGA están preparados en el backend, pero falta desplegar el servidor propio de inferencia GPU y configurar MEGA_INFERENCE_URL en Render.'
+    });
+  }
+
+  if (selectedProvider !== 'mega' && !apiKeyForProvider(selectedProvider)) {
     const keyName = {
       openai: 'OPENAI_API_KEY',
       gemini: 'GEMINI_API_KEY',
