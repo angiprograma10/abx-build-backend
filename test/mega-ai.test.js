@@ -690,3 +690,59 @@ test('skips redundant model QA for a single-specialist MEGA model while keeping 
     }
   }
 });
+
+
+test('MEGA BUILD receives explicit spatial-planning and per-part color requirements', async () => {
+  const env = {
+    url: process.env.MEGA_INFERENCE_URL,
+    key: process.env.GEMINI_API_KEY,
+    primary: process.env.MEGA_BOOTSTRAP_MODEL,
+    delay: process.env.MEGA_RETRY_BASE_MS
+  };
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'build-quality-test-model';
+  process.env.MEGA_RETRY_BASE_MS = '0';
+  let captured = null;
+  global.fetch = async (_url, options) => {
+    captured = JSON.parse(options.body);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{
+          content: { parts: [{ text: JSON.stringify({ reply: 'Construcción planificada.', actions: [] }) }] }
+        }]
+      })
+    };
+  };
+
+  try {
+    await mega.generateMegaResponse({
+      selectedModel: 'mega-lite-2',
+      message: 'Construye una tienda medieval profesional con madera y piedra.',
+      history: [],
+      buildMode: 'standard',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+    const prompt = captured.systemInstruction.parts[0].text;
+    assert.match(prompt, /PLAN ESPACIAL OBLIGATORIO/);
+    assert.match(prompt, /position \[x,y,z\]/);
+    assert.match(prompt, /COLOR OBLIGATORIO/);
+    assert.match(prompt, /paleta deliberada de 3-4 tonos/);
+    assert.match(prompt, /silueta debe reconocerse desde frente, lado y arriba/);
+  } finally {
+    global.fetch = oldFetch;
+    for (const [key, value] of Object.entries({
+      MEGA_INFERENCE_URL: env.url,
+      GEMINI_API_KEY: env.key,
+      MEGA_BOOTSTRAP_MODEL: env.primary,
+      MEGA_RETRY_BASE_MS: env.delay
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
