@@ -89,8 +89,8 @@ const MEGA_TIERS = Object.freeze({
     note: 'Tareas rápidas: scripts, correcciones, ajustes y construcciones concretas.',
     maxTasks: 2,
     maxActions: 8,
-    directorTokens: 2200,
-    specialistTokens: 4200,
+    directorTokens: 1500,
+    specialistTokens: 3000,
     qaPasses: 0,
     qaTokens: 0,
     instruction: 'Prioriza velocidad y claridad. Utiliza hasta dos especialistas, eligiendo los más relevantes. Resuelve por completo el alcance pequeño solicitado; no añadas sistemas o decoración que no aporten.'
@@ -104,10 +104,10 @@ const MEGA_TIERS = Object.freeze({
     note: 'Trabajos medianos: sistemas, interfaces y construcciones más detalladas.',
     maxTasks: 3,
     maxActions: 14,
-    directorTokens: 2800,
-    specialistTokens: 5800,
+    directorTokens: 1900,
+    specialistTokens: 4200,
     qaPasses: 1,
-    qaTokens: 4200,
+    qaTokens: 3200,
     instruction: 'Planifica trabajos medianos. Coordina hasta tres especialistas según dependencias. Incluye una revisión final de coherencia de acciones, rutas, geometría y comportamiento.'
   }),
   'mega-lite-3-5': Object.freeze({
@@ -119,10 +119,10 @@ const MEGA_TIERS = Object.freeze({
     note: 'Proyectos importantes con varios especialistas y revisión técnica.',
     maxTasks: 5,
     maxActions: 24,
-    directorTokens: 3600,
-    specialistTokens: 7600,
+    directorTokens: 2400,
+    specialistTokens: 5600,
     qaPasses: 1,
-    qaTokens: 6000,
+    qaTokens: 4200,
     instruction: 'Aborda proyectos grandes con hasta cinco especialistas. Define dependencias, conserva nombres y rutas compartidos, integra construcción, programación, VFX, UI y jugabilidad cuando sean necesarios y realiza una auditoría técnica final.'
   }),
   'mega-go': Object.freeze({
@@ -134,10 +134,10 @@ const MEGA_TIERS = Object.freeze({
     note: 'Juegos complejos: programación avanzada, VFX, interfaces y construcciones coordinadas.',
     maxTasks: 5,
     maxActions: 30,
-    directorTokens: 4400,
-    specialistTokens: 9200,
-    qaPasses: 2,
-    qaTokens: 7600,
+    directorTokens: 2800,
+    specialistTokens: 6800,
+    qaPasses: 1,
+    qaTokens: 4800,
     instruction: 'Trabaja como un equipo avanzado de desarrollo Roblox. Descompón el proyecto, coordina todas las disciplinas pertinentes, integra sistemas y presentación visual y realiza dos pasadas de auditoría para detectar omisiones, referencias rotas, incompatibilidades y problemas de rendimiento.'
   }),
   'mega-max': Object.freeze({
@@ -149,11 +149,11 @@ const MEGA_TIERS = Object.freeze({
     note: 'Proyectos completos con planificación profunda, integración y auditoría reforzada.',
     maxTasks: 5,
     maxActions: 30,
-    directorTokens: 5200,
-    specialistTokens: 11000,
-    qaPasses: 2,
-    qaTokens: 9200,
-    instruction: 'Actúa como equipo principal de producción para un juego Roblox completo. Antes de generar, define arquitectura, criterios de aceptación, dependencias, orden de implementación y coherencia entre sistemas. Utiliza todos los especialistas que aporten valor; optimiza la calidad, mantenibilidad y rendimiento. Ejecuta dos auditorías independientes del plan y corrige las acciones cuando sea posible. No inventes pruebas, APIs ni capacidades del plugin.'
+    directorTokens: 3400,
+    specialistTokens: 7800,
+    qaPasses: 1,
+    qaTokens: 6000,
+    instruction: 'Actúa como equipo principal de producción para un juego Roblox completo. Antes de generar, define arquitectura, criterios de aceptación, dependencias y orden de implementación. Utiliza los especialistas que aporten valor, optimiza mantenibilidad y rendimiento, y realiza una auditoría final integral que compruebe la coherencia del conjunto. Sé exhaustivo en la comprobación, no en la cantidad de texto. No inventes pruebas, APIs ni capacidades del plugin.'
   })
 });
 
@@ -415,24 +415,52 @@ function specialistMessages(roleId, sharedSystemInstruction, message, context, h
 }
 
 
-function getBootstrapModelCandidates() {
+const preferredBootstrapModels = new Map();
+
+function getBootstrapModelCandidates(tierId) {
+  const tierDefaults = {
+    'mega-lite': {
+      env: 'MEGA_LITE_MODEL',
+      models: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.6-flash', 'gemini-3.8-flash']
+    },
+    'mega-lite-2': {
+      env: 'MEGA_LITE_2_MODEL',
+      models: ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
+    },
+    'mega-lite-3-5': {
+      env: 'MEGA_LITE_3_5_MODEL',
+      models: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
+    },
+    'mega-go': {
+      env: 'MEGA_GO_MODEL',
+      models: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
+    },
+    'mega-max': {
+      env: 'MEGA_MAX_MODEL',
+      models: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
+    }
+  };
+  const profile = tierDefaults[tierId] || {
+    env: 'MEGA_BOOTSTRAP_MODEL',
+    models: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
+  };
   const primary = String(
+    process.env[profile.env] ||
     process.env.MEGA_BOOTSTRAP_MODEL ||
     process.env.GEMINI_MODEL ||
-    'gemini-3.8-flash'
+    profile.models[0]
   ).trim();
   const configuredFallbacks = String(process.env.MEGA_BOOTSTRAP_FALLBACK_MODELS || '')
     .split(/[;,]/)
     .map(value => value.trim())
     .filter(Boolean);
-  const defaults = [
-    'gemini-3.8-flash',
-    'gemini-3.6-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-3.1-flash-lite'
-  ];
-  const fallbacks = configuredFallbacks.length ? configuredFallbacks : defaults;
-  return [...new Set([primary, ...fallbacks].filter(Boolean))].slice(0, 5);
+  const fallbacks = configuredFallbacks.length ? configuredFallbacks : profile.models;
+  const preferred = preferredBootstrapModels.get(tierId || 'default');
+  const candidates = [...new Set([primary, ...fallbacks].filter(Boolean))].slice(0, 5);
+  if (preferred && candidates.includes(preferred)) {
+    return [preferred, ...candidates.filter(candidate => candidate !== preferred)];
+  }
+  return candidates;
 }
 
 function waitForRetry(delayMs, signal) {
@@ -501,7 +529,7 @@ function bootstrapRetryDelay(response, retryIndex) {
   return Math.round(exponential * (0.8 + Math.random() * 0.4));
 }
 
-async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, temperature = 0.15 }) {
+async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, temperature = 0.15, tierId = 'default' }) {
   const endpoint = getMegaEndpoint();
   const model = roleId === 'qa'
     ? (process.env.MEGA_QA_MODEL || process.env.MEGA_DIRECTOR_MODEL || getMegaBaseModel())
@@ -518,7 +546,7 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
       throw error;
     }
 
-    const models = getBootstrapModelCandidates();
+    const models = getBootstrapModelCandidates(tierId);
     let activeModel = '';
     let lastFailure = null;
     const failures = [];
@@ -589,6 +617,7 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
             const payload = await response.json().catch(() => ({}));
             if (response.ok) {
               activeModel = candidateModel;
+              preferredBootstrapModels.set(tierId || 'default', candidateModel);
               return payload?.candidates?.[0]?.content?.parts
                 ?.map(part => typeof part.text === 'string' ? part.text : '')
                 .join('') || '';
@@ -691,6 +720,29 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
   return { parsed, model };
 }
 
+function inferFastSpecialist(message) {
+  const text = String(message || '').toLowerCase();
+  if (!text || text.length > 360) return '';
+
+  const hasRewardLogic =
+    /(?:coin|moneda|punto|recompensa|premio)/i.test(text) &&
+    /(?:por cada|cada vez|cuando|al saltar|salte|gana|ganar|suma|sumar|añad|agrega|recibe|otorga|aument)/i.test(text);
+  if (hasRewardLogic &&
+      !/\b(ciudad|estadio|casa|edificio|torre|mapa|obby|interfaz|men[uú]|hud|part[ií]culas|iluminaci[oó]n|efectos)\b/i.test(text)) {
+    return 'mega-scripting';
+  }
+
+  const domains = [];
+  if (/\b(ciudad|estadio|casa|edificio|torre|mapa|obby|terreno|interior|campo|edificio|base|puente|carretera|construcci[oó]n)\b/i.test(text)) domains.push('mega-build');
+  if (/\b(interfaz|men[uú]|hud|inventario visual|pantalla|bot[oó]n|ui|panel|tienda visual)\b/i.test(text)) domains.push('mega-ui');
+  if (/\b(vfx|efecto|part[ií]cula|iluminaci[oó]n|ambiente|aura|trail|beam|explosi[oó]n visual)\b/i.test(text)) domains.push('mega-fx');
+  if (/\b(script|program|luau|c[oó]digo|funci[oó]n|evento|remote|monedas|coins|recompensa|puntos|salto|saltar|guardar datos)\b/i.test(text)) domains.push('mega-scripting');
+  if (/\b(diseña el juego|diseñar el juego|reglas del juego|bucle de juego|mec[aá]nica de juego|ronda|progresi[oó]n|modo de juego)\b/i.test(text)) domains.push('mega-gameplay');
+
+  const uniqueDomains = [...new Set(domains)];
+  return uniqueDomains.length === 1 ? uniqueDomains[0] : '';
+}
+
 function fallbackSpecialists(message) {
   const text = String(message || '');
   const tasks = [];
@@ -723,21 +775,29 @@ async function generateMegaResponse({
 }) {
   const normalizedHistory = normalizeHistory(history);
   const tier = getMegaTier(selectedModel);
-  const isDirector = Boolean(tier) || selectedModel === 'mega-director' || buildMode === 'full-game';
+  const fastSpecialist = tier && buildMode !== 'full-game'
+    ? inferFastSpecialist(message)
+    : '';
+  const isDirector = selectedModel === 'mega-director' ||
+    buildMode === 'full-game' ||
+    (Boolean(tier) && !fastSpecialist);
   const actionLimit = tier ? Math.min(maxActions, tier.maxActions) : maxActions;
   const taskLimit = tier ? tier.maxTasks : 5;
   const tierSystemInstruction = tier
     ? systemInstruction + '\n\nPERFIL DE BOT ' + tier.name.toUpperCase() + ':\n' +
       tier.instruction + '\nLímite de especialistas coordinados: ' + taskLimit +
       '. Límite de acciones del plan: ' + actionLimit +
-      '. Todas las especialidades MEGA están disponibles internamente; selecciona solo las que realmente aporten.'
+      '. Prioriza una entrega completa y concreta, con explicaciones breves. Todas las especialidades MEGA están disponibles internamente; selecciona solo las que realmente aporten.'
     : systemInstruction;
 
   let tasks;
   let projectBrief = '';
   let reply = '';
 
-  if (isDirector) {
+  if (fastSpecialist) {
+    // Clear one-domain tasks skip the director round trip.
+    tasks = [{ specialist: fastSpecialist, task: message, dependsOn: [] }];
+  } else if (isDirector) {
     const planPrompt = [
       { role: 'system', content: roleSystemPrompt('mega-director', tierSystemInstruction) },
       ...normalizedHistory,
@@ -752,30 +812,30 @@ async function generateMegaResponse({
           '\n\nPERFIL Y LÍMITES:\n' + (tier
             ? tier.name + ': ' + tier.instruction
             : 'Utiliza hasta cinco tareas.') +
-          '\nMáximo ' + taskLimit + ' tareas. Ordena las tareas respetando dependencias. No delegues por rutina: cada especialista debe aportar trabajo real.'
+          '\nMáximo ' + taskLimit + ' tareas. Ordena las tareas respetando sus dependencias reales. No delegues por rutina: cada especialista debe aportar trabajo real. Devuelve un plan conciso.'
       }
     ];
     const planned = await callMegaModel({
       roleId: 'mega-director',
       messages: planPrompt,
       signal,
-      maxTokens: tier ? tier.directorTokens : 2500,
-      temperature: 0.1
+      maxTokens: tier ? tier.directorTokens : 1800,
+      temperature: 0.1,
+      tierId: tier ? tier.id : 'default'
     });
     const plan = planned.parsed;
-    projectBrief = typeof plan.projectBrief === 'string' ? plan.projectBrief.slice(0, 5000) : '';
-    reply = typeof plan.reply === 'string' ? plan.reply.slice(0, 1200) : '';
+    projectBrief = typeof plan.projectBrief === 'string' ? plan.projectBrief.slice(0, 3800) : '';
+    reply = typeof plan.reply === 'string' ? plan.reply.slice(0, 900) : '';
     const allowed = new Set(SPECIALIST_IDS);
     tasks = Array.isArray(plan.tasks)
       ? plan.tasks.slice(0, taskLimit).map(task => ({
           specialist: String(task && task.specialist || '').toLowerCase(),
-          task: typeof (task && task.task) === 'string' ? task.task.slice(0, 1600) : '',
+          task: typeof (task && task.task) === 'string' ? task.task.slice(0, 1200) : '',
           dependsOn: Array.isArray(task && task.dependsOn) ? task.dependsOn.filter(id => typeof id === 'string').slice(0, 5) : []
         })).filter(task => allowed.has(task.specialist) && task.task)
       : [];
     if (tasks.length === 0) tasks = fallbackSpecialists(message).slice(0, taskLimit);
   } else if (Object.prototype.hasOwnProperty.call(MEGA_ROLES, selectedModel)) {
-    // Compatibilidad con enlaces y selecciones antiguas: los roles internos siguen funcionando.
     tasks = [{ specialist: selectedModel, task: message, dependsOn: [] }];
   } else {
     const error = new Error('No se reconoció el nivel de MEGA seleccionado.');
@@ -794,50 +854,77 @@ async function generateMegaResponse({
   }
 
   const results = [];
-  const combinedActions = [];
-  for (const task of tasks) {
-    const previousContext = results.map(result => ({
-      specialist: result.specialist,
-      task: result.task,
-      reply: result.reply,
-      actions: result.actions
-    }));
-    const context = [
-      projectBrief ? 'RESUMEN DEL DIRECTOR:\n' + projectBrief : '',
-      'TAREA ASIGNADA A ' + task.specialist.toUpperCase() + ':\n' + task.task,
-      task.dependsOn.length ? 'DEPENDENCIAS DECLARADAS: ' + task.dependsOn.join(', ') : '',
-      previousContext.length ? 'ENTREGAS ANTERIORES DE OTROS ESPECIALISTAS:\n' + JSON.stringify(previousContext).slice(0, 14000) : '',
-      'BLOQUEO DE ALCANCE: implementa solo los requisitos explícitos y el soporte mínimo indispensable; no inventes extras. No cambies el comportamiento normal del jugador si no se pidió. Conserva exactamente los nombres y rutas compartidos.'
-    ].filter(Boolean).join('\n\n');
+  const pending = tasks.map((task, index) => ({ ...task, index }));
+  const completedSpecialists = new Set();
+  const maxParallelSpecialists = 3;
 
-    const generated = await callMegaModel({
-      roleId: task.specialist,
-      messages: specialistMessages(task.specialist, tierSystemInstruction, message, context, normalizedHistory),
-      signal,
-      maxTokens: tier ? tier.specialistTokens : 6500,
-      temperature: 0.12
-    });
-    const agentReply = typeof generated.parsed.reply === 'string' ? generated.parsed.reply.slice(0, 1400) : '';
-    const actions = Array.isArray(generated.parsed.actions) ? generated.parsed.actions : [];
-    if (actions.length > actionLimit || combinedActions.length + actions.length > actionLimit) {
-      const error = new Error('El plan de ' + (tier ? tier.name : 'MEGA') + ' superó su límite de acciones. Divide el proyecto en etapas.');
-      error.code = 'MEGA_ACTION_LIMIT';
-      error.httpStatus = 422;
-      throw error;
+  // Only tasks with unresolved dependencies wait. Independent specialists
+  // execute concurrently, and their outputs are combined in the director's
+  // original order for deterministic action application.
+  while (pending.length) {
+    const pendingSpecialists = new Set(pending.map(task => task.specialist));
+    let ready = pending.filter(task =>
+      task.dependsOn.every(dependency =>
+        completedSpecialists.has(dependency) || !pendingSpecialists.has(dependency)
+      )
+    );
+    if (!ready.length) ready = [pending[0]]; // Break malformed dependency cycles safely.
+    const batch = ready.slice(0, maxParallelSpecialists);
+
+    const batchResults = await Promise.all(batch.map(async task => {
+      const previousContext = results.map(result => ({
+        specialist: result.specialist,
+        task: result.task,
+        reply: result.reply,
+        actions: result.actions
+      }));
+      const context = [
+        projectBrief ? 'RESUMEN DEL DIRECTOR:\n' + projectBrief : '',
+        'TAREA ASIGNADA A ' + task.specialist.toUpperCase() + ':\n' + task.task,
+        task.dependsOn.length ? 'DEPENDENCIAS DECLARADAS: ' + task.dependsOn.join(', ') : '',
+        previousContext.length ? 'ENTREGAS ANTERIORES DE OTROS ESPECIALISTAS:\n' + JSON.stringify(previousContext).slice(0, 10000) : '',
+        'BLOQUEO DE ALCANCE: implementa solo los requisitos explícitos y el soporte mínimo indispensable; no inventes extras. No cambies el comportamiento normal del jugador si no se pidió. Conserva exactamente los nombres y rutas compartidos.'
+      ].filter(Boolean).join('\n\n');
+
+      const generated = await callMegaModel({
+        roleId: task.specialist,
+        messages: specialistMessages(task.specialist, tierSystemInstruction, message, context, normalizedHistory),
+        signal,
+        maxTokens: tier ? tier.specialistTokens : 5000,
+        temperature: 0.12,
+        tierId: tier ? tier.id : 'default'
+      });
+      return {
+        index: task.index,
+        specialist: task.specialist,
+        task: task.task,
+        reply: typeof generated.parsed.reply === 'string' ? generated.parsed.reply.slice(0, 1000) : '',
+        actions: Array.isArray(generated.parsed.actions) ? generated.parsed.actions : [],
+        model: generated.model
+      };
+    }));
+
+    batchResults.sort((a, b) => a.index - b.index);
+    for (const result of batchResults) {
+      if (result.actions.length > actionLimit ||
+          results.reduce((total, item) => total + item.actions.length, 0) + result.actions.length > actionLimit) {
+        const error = new Error('El plan de ' + (tier ? tier.name : 'MEGA') + ' superó su límite de acciones. Divide el proyecto en etapas.');
+        error.code = 'MEGA_ACTION_LIMIT';
+        error.httpStatus = 422;
+        throw error;
+      }
+      results.push(result);
+      completedSpecialists.add(result.specialist);
+      const pendingIndex = pending.findIndex(item => item.index === result.index);
+      if (pendingIndex >= 0) pending.splice(pendingIndex, 1);
     }
-    results.push({
-      specialist: task.specialist,
-      task: task.task,
-      reply: agentReply,
-      actions,
-      model: generated.model
-    });
-    combinedActions.push(...actions);
   }
 
+  results.sort((a, b) => a.index - b.index);
+  const combinedActions = results.flatMap(result => result.actions);
   const reviewContext = [
     projectBrief ? 'RESUMEN DEL PROYECTO:\n' + projectBrief : '',
-    'ENTREGAS DE ESPECIALISTAS:\n' + JSON.stringify(results).slice(0, 26000),
+    'ENTREGAS DE ESPECIALISTAS:\n' + JSON.stringify(results).slice(0, 22000),
     'Petición original: ' + message
   ].filter(Boolean).join('\n\n');
 
@@ -846,11 +933,10 @@ async function generateMegaResponse({
     actions: combinedActions
   };
 
-  const qaPasses = tier ? tier.qaPasses : (isDirector && combinedActions.length ? 1 : 0);
+  // One concise but rigorous integration audit is faster than repeated model rounds.
+  const qaPasses = fastSpecialist ? 0 : (tier ? Math.min(1, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
   for (let pass = 0; pass < qaPasses && finalParsed.actions.length; pass++) {
-    const passPrompt = pass === 0
-      ? 'Primera auditoría: detecta dependencias rotas, incompatibilidades, omisiones y errores concretos. Corrige solo lo necesario.'
-      : 'Auditoría independiente adicional: vuelve a comprobar el resultado ya revisado. Busca fallos que la primera revisión pudiera pasar por alto; evita cambios cosméticos o innecesarios.';
+    const passPrompt = 'AUDITORÍA FINAL INTEGRAL: comprueba dependencias, rutas, nombres, compatibilidad, fidelidad exacta a la petición, colores visuales y funcionalidad. Corrige solo defectos concretos. Elimina extras no solicitados. Devuelve las acciones completas, no una explicación.';
     const reviewed = await callMegaModel({
       roleId: 'qa',
       messages: specialistMessages('qa', tierSystemInstruction, message,
@@ -858,13 +944,14 @@ async function generateMegaResponse({
         '\n\nBORRADOR ACTUAL DE ACCIONES:\n' + JSON.stringify(finalParsed),
         []),
       signal,
-      maxTokens: tier ? tier.qaTokens : 6500,
-      temperature: 0.08
+      maxTokens: tier ? tier.qaTokens : 4800,
+      temperature: 0.08,
+      tierId: tier ? tier.id : 'default'
     });
     if (Array.isArray(reviewed.parsed.actions)) {
       finalParsed = {
         reply: typeof reviewed.parsed.reply === 'string' && reviewed.parsed.reply.trim()
-          ? reviewed.parsed.reply.slice(0, 2500)
+          ? reviewed.parsed.reply.slice(0, 1800)
           : finalParsed.reply,
         actions: reviewed.parsed.actions
       };
@@ -902,5 +989,6 @@ module.exports = {
   getMegaTier,
   getMegaCatalog,
   getMegaStatus,
+  inferFastSpecialist,
   generateMegaResponse
 };
