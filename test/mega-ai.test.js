@@ -27,8 +27,15 @@ test('publishes six specialist entries without exposing secrets', () => {
   process.env.MEGA_INFERENCE_API_KEY = 'test-secret-that-must-not-be-returned';
   try {
     const status = mega.getMegaStatus();
+    const catalog = mega.getMegaCatalog();
     assert.equal(status.configured, false);
     assert.equal(status.models.length, 6);
+    assert.equal(catalog.length, 6);
+    assert.deepEqual(
+      catalog.map(model => model.id),
+      ['mega-director', 'mega-build', 'mega-scripting', 'mega-ui', 'mega-fx', 'mega-gameplay']
+    );
+    assert.equal(catalog.every(model => model.provider === 'mega'), true);
     assert.equal(JSON.stringify(status).includes('test-secret-that-must-not-be-returned'), false);
   } finally {
     if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
