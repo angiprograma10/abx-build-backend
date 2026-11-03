@@ -721,7 +721,7 @@ test('MEGA BUILD receives explicit spatial-planning and per-part color requireme
   try {
     await mega.generateMegaResponse({
       selectedModel: 'mega-lite-2',
-      message: 'Construye una tienda medieval profesional con madera y piedra.',
+      message: 'Construye una casa medieval profesional con madera y piedra.',
       history: [],
       buildMode: 'standard',
       systemInstruction: 'Test',
