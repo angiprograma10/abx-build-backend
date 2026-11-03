@@ -632,3 +632,61 @@ test('uses a user-friendly failure after all structured-output repairs are exhau
     else process.env.GEMINI_API_KEY = oldKey;
   }
 });
+
+
+test('skips redundant model QA for a single-specialist MEGA model while keeping engineering rules', async () => {
+  const env = {
+    url: process.env.MEGA_INFERENCE_URL,
+    key: process.env.GEMINI_API_KEY,
+    primary: process.env.MEGA_BOOTSTRAP_MODEL,
+    delay: process.env.MEGA_RETRY_BASE_MS
+  };
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'single-specialist-test-model';
+  process.env.MEGA_RETRY_BASE_MS = '0';
+  const requests = [];
+  global.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({
+          reply: 'Sistema implementado.',
+          actions: []
+        }) }] } }]
+      })
+    };
+  };
+
+  try {
+    const result = await mega.generateMegaResponse({
+      selectedModel: 'mega-lite-2',
+      message: 'Por cada salto del personaje, suma exactamente 5 coins.',
+      history: [],
+      buildMode: 'standard',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+
+    assert.equal(requests.length, 1, 'one clear specialist task must use one model call, without Director or QA');
+    assert.equal(result.modelUsed, 'MEGA Lite 2.0');
+    const prompt = requests[0].systemInstruction.parts[0].text;
+    assert.match(prompt, /RAZONAMIENTO DE INGENIERÍA/);
+    assert.match(prompt, /ROBLOX REAL, NO PSEUDOCÓDIGO/);
+    assert.match(prompt, /UNA PASADA BIEN PREPARADA/);
+  } finally {
+    global.fetch = oldFetch;
+    for (const [key, value] of Object.entries({
+      MEGA_INFERENCE_URL: env.url,
+      GEMINI_API_KEY: env.key,
+      MEGA_BOOTSTRAP_MODEL: env.primary,
+      MEGA_RETRY_BASE_MS: env.delay
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
