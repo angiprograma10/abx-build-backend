@@ -113,7 +113,7 @@ function getRoleModel(modelId) {
 }
 
 function getMegaCatalog() {
-  const configured = Boolean(getMegaEndpoint());
+  const configured = Boolean(getMegaEndpoint() || process.env.GEMINI_API_KEY);
   const publicSpecialists = [
     'mega-scripting',
     'mega-build',
@@ -137,11 +137,13 @@ function getMegaCatalog() {
 }
 
 function getMegaStatus() {
+  const endpointConfigured = Boolean(getMegaEndpoint());
+  const bootstrapConfigured = !endpointConfigured && Boolean(process.env.GEMINI_API_KEY);
   return {
-    configured: Boolean(getMegaEndpoint()),
-    endpointConfigured: Boolean(getMegaEndpoint()),
+    configured: endpointConfigured || bootstrapConfigured,
+    endpointConfigured,
+    runtimeMode: endpointConfigured ? 'self-hosted' : bootstrapConfigured ? 'temporary-bootstrap' : 'unavailable',
     baseModel: getMegaBaseModel(),
-    inferenceProvider: 'self-hosted',
     models: getMegaCatalog().map(({ id, name, note, available, trainedAdapter }) => ({
       id, name, note, available, trainedAdapter
     }))
@@ -200,17 +202,87 @@ function specialistMessages(roleId, sharedSystemInstruction, message, context, h
 
 async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, temperature = 0.15 }) {
   const endpoint = getMegaEndpoint();
-  if (!endpoint) {
-    const error = new Error('MEGA AI todavía no está conectado a un servidor de inferencia propio. Configura MEGA_INFERENCE_URL en Render y despliega el servidor GPU.');
-    error.code = 'MEGA_NOT_CONFIGURED';
-    error.httpStatus = 503;
-    throw error;
-  }
-
   const role = MEGA_ROLES[roleId];
   const model = roleId === 'qa'
     ? (process.env.MEGA_QA_MODEL || process.env.MEGA_DIRECTOR_MODEL || getMegaBaseModel())
     : getRoleModel(roleId);
+
+  // Temporary runtime: keep the MEGA specialist identities and prompts while
+  // using the already-configured internal API key until a dedicated GPU endpoint exists.
+  if (!endpoint) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      const error = new Error('Los especialistas MEGA están preparados, pero falta conectar el motor de inferencia. Configura el servidor propio o la clave temporal de inferencia en Render.');
+      error.code = 'MEGA_NOT_CONFIGURED';
+      error.httpStatus = 503;
+      throw error;
+    }
+
+    const bootstrapModel = process.env.MEGA_BOOTSTRAP_MODEL || process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+    const systemText = messages
+      .filter(item => item && item.role === 'system' && typeof item.content === 'string')
+      .map(item => item.content)
+      .join('\\n\\n');
+    const contents = messages
+      .filter(item => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string')
+      .map(item => ({
+        role: item.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: item.content }]
+      }));
+
+    let response;
+    try {
+      response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/' +
+          encodeURIComponent(bootstrapModel) + ':generateContent',
+        {
+          method: 'POST',
+          signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey
+          },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemText }] },
+            contents,
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature,
+              maxOutputTokens: maxTokens
+            }
+          })
+        }
+      );
+    } catch (cause) {
+      const error = new Error('No se pudo conectar con el motor temporal de MEGA. Revisa la conexión del backend y la configuración de inferencia.');
+      error.code = 'MEGA_CONNECTION_FAILED';
+      error.httpStatus = 503;
+      error.cause = cause;
+      throw error;
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = String(payload?.error?.message || payload?.message || '').slice(0, 220);
+      const error = new Error('El motor temporal de MEGA rechazó la solicitud (HTTP ' + response.status + '). ' + detail);
+      error.code = 'MEGA_INFERENCE_HTTP_ERROR';
+      error.httpStatus = response.status === 429 ? 429 : 502;
+      throw error;
+    }
+
+    const output = payload?.candidates?.[0]?.content?.parts
+      ?.map(part => typeof part.text === 'string' ? part.text : '')
+      .join('');
+    const parsed = parseJsonContent(output);
+    if (!parsed) {
+      const error = new Error('El especialista MEGA devolvió una respuesta que no cumple el JSON requerido. No se enviaron acciones a Roblox Studio.');
+      error.code = 'MEGA_INVALID_OUTPUT';
+      error.httpStatus = 502;
+      throw error;
+    }
+    return { parsed, model: 'MEGA_TEMPORARY_BASE' };
+  }
+
   const headers = { 'Content-Type': 'application/json' };
   if (process.env.MEGA_INFERENCE_API_KEY) {
     headers.Authorization = 'Bearer ' + process.env.MEGA_INFERENCE_API_KEY;
@@ -231,7 +303,7 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
       })
     });
   } catch (cause) {
-    const error = new Error('No se pudo conectar con el servidor propio de MEGA AI. Comprueba MEGA_INFERENCE_URL y que el servidor GPU esté activo.');
+    const error = new Error('No se pudo conectar con el servidor propio de MEGA AI. Comprueba MEGA_INFERENCE_URL y que el servidor esté activo.');
     error.code = 'MEGA_CONNECTION_FAILED';
     error.httpStatus = 503;
     error.cause = cause;
