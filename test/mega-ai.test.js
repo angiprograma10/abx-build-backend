@@ -124,3 +124,58 @@ test('runs a MEGA specialist through the temporary runtime when no GPU endpoint 
     else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
   }
 });
+
+test('repairs malformed and incomplete model output before returning MEGA actions', async () => {
+  const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
+  const oldModel = process.env.MEGA_BOOTSTRAP_MODEL;
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'test-model';
+
+  const responses = [
+    'No puedo devolverlo en ese formato.',
+    JSON.stringify({ reply: 'Respuesta parcial, faltan acciones.' }),
+    'Resultado:\n```json\n' +
+      '{"reply":"Construcción preparada","action":{"type":"CREATE_PART","name":"Base",},}\n' +
+      '```'
+  ];
+  const requests = [];
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push(body);
+    const text = responses.shift();
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text }] } }]
+      })
+    };
+  };
+
+  try {
+    const result = await mega.generateMegaResponse({
+      selectedModel: 'mega-build',
+      message: 'Construye una base',
+      history: [],
+      buildMode: 'standard',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+    assert.equal(requests.length, 3, 'MEGA should retry twice after invalid output');
+    assert.equal(result.reply, 'Construcción preparada');
+    assert.deepEqual(result.actions, [{ type: 'CREATE_PART', name: 'Base' }]);
+    assert.match(requests[1].contents.at(-1).parts[0].text, /REINTENTO DE FORMATO/);
+    assert.match(requests[2].contents.at(-1).parts[0].text, /REINTENTO DE FORMATO/);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
+    else process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL;
+    else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
+  }
+});
