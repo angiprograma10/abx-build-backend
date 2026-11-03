@@ -24,7 +24,7 @@ const CONFIG = Object.freeze({
   maxHistoryItems: 20,
   maxHistoryText: 1800,
   maxOutputTokens: 16000,
-  geminiTimeoutMs: 10 * 60 * 1000, // Give Gemini up to 10 minutes for deep construction/review tasks.
+  geminiTimeoutMs: 180 * 1000, // Hard ceiling; MEGA levels receive tighter per-request limits.
   sessionTtlMs: 6 * 60 * 60 * 1000,
   maxQueuedActions: 40,
   maxPlanActions: 30,
@@ -1989,9 +1989,17 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     : message;
 
   const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(), CONFIG.geminiTimeoutMs
-  );
+  const megaTimeouts = {
+    'mega-lite': 60 * 1000,
+    'mega-lite-2': 75 * 1000,
+    'mega-lite-3-5': 110 * 1000,
+    'mega-go': 150 * 1000,
+    'mega-max': 180 * 1000
+  };
+  const requestTimeout = selectedProvider === 'mega'
+    ? (megaTimeouts[model] || CONFIG.geminiTimeoutMs)
+    : CONFIG.geminiTimeoutMs;
+  const timeout = setTimeout(() => controller.abort(), requestTimeout);
 
   session.chatBusy = true;
   // Prevent a previous unconfirmed plan from being applied by a later prompt.
