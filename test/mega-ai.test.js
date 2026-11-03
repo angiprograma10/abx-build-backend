@@ -66,6 +66,74 @@ test('publishes five MEGA specialists and hides internal inference credentials',
   }
 });
 
+test('routes MEGA Lite through the director and coordinates the selected specialists', async () => {
+  const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
+  const oldModel = process.env.MEGA_BOOTSTRAP_MODEL;
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'test-model';
+
+  const responses = [
+    {
+      reply: 'Plan breve',
+      projectBrief: 'Construcción y lógica para una base.',
+      tasks: [
+        { specialist: 'mega-build', task: 'Construye la base.', dependsOn: [] },
+        { specialist: 'mega-scripting', task: 'Programa la interacción.', dependsOn: [] },
+        { specialist: 'mega-ui', task: 'Diseña la interfaz.', dependsOn: [] }
+      ]
+    },
+    { reply: 'Base preparada', actions: [] },
+    { reply: 'Interacción preparada', actions: [] }
+  ];
+  const requests = [];
+  global.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    const next = responses.shift();
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{
+          content: {
+            parts: [{ text: JSON.stringify(next) }]
+          }
+        }]
+      })
+    };
+  };
+
+  try {
+    const result = await mega.generateMegaResponse({
+      selectedModel: 'mega-lite',
+      message: 'Crea una base con una interacción sencilla',
+      history: [],
+      buildMode: 'standard',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+
+    assert.equal(result.modelUsed, 'MEGA Lite');
+    assert.equal(requests.length, 3, 'Lite should plan once and call two specialists');
+    assert.deepEqual(
+      result.agentTrace.map(agent => agent.specialist),
+      ['mega-build', 'mega-scripting']
+    );
+    assert.match(requests[0].contents.at(-1).parts[0].text, /Máximo 2 tareas/);
+    assert.deepEqual(result.actions, []);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
+    else process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL;
+    else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
+  }
+});
+
 test('rejects generation clearly when the self-hosted endpoint is missing', async () => {
   const oldUrl = process.env.MEGA_INFERENCE_URL;
   const oldKey = process.env.GEMINI_API_KEY;
