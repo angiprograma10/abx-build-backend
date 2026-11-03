@@ -768,7 +768,7 @@ function isComplexGeometryRequest(message) {
 }
 
 function analyzeActionGeometry(actions, message) {
-  if (!isComplexGeometryRequest(message)) return [];
+  if (!Array.isArray(actions) || actions.length === 0 || !isComplexGeometryRequest(message)) return [];
   const geometryActions = (Array.isArray(actions) ? actions : []).filter(action =>
     action && ['CREATE_STRUCTURE', 'CREATE_MODEL_BLUEPRINT'].includes(action.type)
   );
