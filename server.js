@@ -1984,6 +1984,24 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   try {
     // Respeta estrictamente el modelo solicitado: no cambies de modelo ni proveedor
     // de forma silenciosa. Si falla, devuelve el error al usuario para que pueda decidir.
+    if (selectedProvider === 'mega') {
+      const megaResult = await generateMegaResponse({
+        selectedModel: model,
+        message: effectiveMessage,
+        history,
+        buildMode,
+        systemInstruction: effectiveSystemInstruction + '\n\n' + JSON_CONTRACT_INSTRUCTION,
+        signal: controller.signal,
+        maxActions: CONFIG.maxPlanActions
+      });
+      response = { ok: true, status: 200 };
+      payload = {
+        megaOutput: JSON.stringify(megaResult),
+        megaResult
+      };
+      usedModel = megaResult.modelUsed || model;
+      usedProvider = 'mega';
+    } else {
     const candidates = [{ provider: selectedProvider, model }];
     // Solo los modelos gratuitos Gemini usan fallback automático entre modelos gratuitos.
     // Los modelos premium y proveedores seleccionados por el usuario no cambian silenciosamente.
@@ -2150,6 +2168,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
       }
     }
 
+    }
     if (!response) {
       return res.status(502).json({
         ok: false,
@@ -2177,6 +2196,8 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
             .join('')
             .trim()
         : '';
+    } else if (usedProvider === 'mega') {
+      output = typeof payload?.megaOutput === 'string' ? payload.megaOutput : '';
     } else if (usedProvider === 'groq' || usedProvider === 'mistral') {
       output = chatMessageText(payload);
     } else {
@@ -2287,9 +2308,18 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
       planCount: actions.length,
       modelUsed: usedModel,
       providerUsed: usedProvider,
+      agents: Array.isArray(payload?.megaResult?.agentTrace) ? payload.megaResult.agentTrace : [],
       usage
     });
   } catch (error) {
+    if (error && typeof error.code === 'string' && error.code.startsWith('MEGA_')) {
+      console.error('[MEGA_AI] request_failed', error.code, cleanText(error.message, 300));
+      return res.status(Number(error.httpStatus) || 503).json({
+        ok: false,
+        code: error.code,
+        error: cleanText(error.message, 500)
+      });
+    }
     if (error.name === 'AbortError') {
       return res.status(504).json({
         ok: false,
