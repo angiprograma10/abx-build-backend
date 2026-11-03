@@ -823,7 +823,7 @@ test('compacts oversized specialist output internally instead of asking the user
   try {
     const result = await mega.generateMegaResponse({
       selectedModel:'mega-lite',
-      message:'Crea once piezas de prueba en Workspace',
+      message:'Construye un terreno con once piezas en Workspace',
       history:[],
       buildMode:'standard',
       systemInstruction:'Test',
