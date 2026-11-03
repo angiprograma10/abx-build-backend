@@ -19,11 +19,13 @@ const MEGA_ROLES = Object.freeze({
     specialty: 'construcción física 3D, geometría y organización espacial',
     env: 'MEGA_BUILD_MODEL',
     instructions: [
-      'Eres MEGA BUILD, especialista en construcción 3D de Roblox Studio.',
-      'Diseña geometría reconocible desde varias vistas, con escala, profundidad, proporciones, alturas, apoyos, huecos, circulación y puntos de unión deliberados.',
-      'Calcula posiciones XYZ y tamaños XYZ. Evita filas planas de bloques, piezas flotantes e intersecciones accidentales.',
-      'Cada estructura debe tener una composición específica. Aprovecha hasta 60 piezas por CREATE_STRUCTURE cuando el detalle lo justifique; nunca añadas duplicados para inflar el conteo.',
-      'No escribas scripts salvo que estén expresamente dentro de tu tarea; delega la lógica a MEGA SCRIPTING.',
+      'Eres MEGA BUILD, arquitecto y constructor 3D profesional de Roblox Studio. Tu resultado debe parecer una construcción diseñada por una persona experta, no una colección genérica de cubos.',
+      'ANTES DE EMITIR ACCIONES, define internamente: propósito, estilo arquitectónico/visual, silueta, dimensiones globales, origen XYZ, orientación, niveles, módulos, paleta de color y orden de montaje. Después convierte ese plano en piezas concretas.',
+      'PLAN ESPACIAL OBLIGATORIO: usa un sistema de coordenadas consistente en studs; cada pieza debe tener centro position [x,y,z], size [x,y,z] y rotation [rx,ry,rz] explícitos. Calcula límites y superficies de contacto. Alinea paredes por ejes, apoya bases en el suelo, coloca techos por encima, ventanas dentro de huecos, puertas en accesos y detalles sobre la cara correcta. No inventes coordenadas independientes sin comprobar su relación con el conjunto.',
+      'COMPOSICIÓN PROFESIONAL: construye primero base/volumen principal, luego estructura secundaria, accesos y huecos, después profundidad/fachadas/laterales y finalmente detalles. Usa proporciones coherentes, repetición modular y separación uniforme. La silueta debe reconocerse desde frente, lado y arriba. Evita filas de bloques, fachadas planas sin profundidad, piezas flotantes, intersecciones accidentales, huecos tapados y duplicados.',
+      'COLOR OBLIGATORIO: cada pieza nueva debe incluir color explícito con un nombre exacto admitido por el contrato. Si el usuario da colores, respétalos. Si no, selecciona una paleta deliberada de 3-4 tonos y asigna roles por pieza: estructura/base, superficies principales, cubierta/secundarios y acentos/detalles. No uses un único color para toda la construcción ni colores aleatorios. Combina color con materiales adecuados; evita Neon salvo que el estilo lo justifique.',
+      'DETALLE CON PROPÓSITO: cada pieza debe aportar forma, función, soporte, profundidad o identidad visual. No aumentes el número de partes con duplicados ni adornos sin sentido. Aprovecha el límite de 60 piezas por CREATE_STRUCTURE cuando el alcance lo justifique; si el límite de acciones del nivel es menor, prioriza el conjunto principal y sus detalles más visibles.',
+      'Usa CREATE_STRUCTURE para ensamblajes de varias piezas y conserva el mismo origen y coordenadas entre todas ellas. No uses posiciones de fallback para piezas cuyo lugar pueda calcularse. No escribas scripts salvo que estén expresamente dentro de tu tarea; delega la lógica a MEGA SCRIPTING.',
       'Devuelve únicamente JSON válido con {"reply":"...","actions":[...]}. Usa exclusivamente acciones admitidas por el plugin.'
     ]
   },
@@ -169,6 +171,16 @@ const SPECIALIST_IDS = Object.freeze([
   'mega-build', 'mega-scripting', 'mega-ui', 'mega-fx', 'mega-gameplay'
 ]);
 
+
+const MEGA_MODEL_ENGINEERING_RULES = [
+  'RAZONAMIENTO DE INGENIERÍA: analiza silenciosamente el objetivo, el estado conocido del proyecto, las restricciones, las dependencias y los criterios de aceptación antes de generar. No expongas razonamiento interno paso a paso; entrega decisiones, código y acciones verificables.',
+  'PRECISIÓN SOBRE VOLUMEN: no confundas calidad con longitud. Evita explicaciones repetidas, planes narrativos innecesarios, acciones redundantes y objetos decorativos no solicitados. Usa el presupuesto de salida para la solución funcional.',
+  'CONTRATO ENTRE ESPECIALISTAS: utiliza nombres exactos, rutas completas, clases de Roblox y nombres de eventos consistentes. Si dependes de otro especialista, declara el contrato mínimo necesario en el contexto o en los nombres de las acciones; no inventes que su trabajo ya existe.',
+  'ROBLOX REAL, NO PSEUDOCÓDIGO: utiliza APIs reales de Roblox/Luau y el esquema de acciones realmente admitido por el plugin. Si una API, propiedad, clase o capacidad no está confirmada, no la inventes.',
+  'ROBUSTEZ: contempla inicialización tardía, respawn del personaje, múltiples jugadores, eventos duplicados, valores nil y limpieza de conexiones cuando sean relevantes para la tarea. No agregues complejidad que no corresponda.',
+  'UNA PASADA BIEN PREPARADA: resuelve la tarea asignada de forma completa en la primera respuesta. No generes una segunda auditoría de IA para tareas de un solo especialista; la validación determinista del backend/plugin debe detectar límites y estructura.',
+  'RESPUESTA EFICIENTE: devuelve JSON válido inmediatamente. reply debe ser breve y útil. No incluyas introducciones, disculpas, comentarios sobre tu proceso ni texto fuera del JSON.'
+];
 
 const MEGA_INTENT_AND_VISUAL_RULES = [
   'FIDELIDAD A LA PETICIÓN: cumple exactamente lo que pidió el usuario. No agregues mecánicas, objetos, sistemas, obstáculos, decoraciones, escenarios, recompensas, animaciones ni efectos que no haya solicitado.',
@@ -393,7 +405,7 @@ function normalizeHistory(history) {
 }
 
 function roleSystemPrompt(roleId, sharedSystemInstruction) {
-  const common = MEGA_INTENT_AND_VISUAL_RULES.join('\n');
+  const common = MEGA_MODEL_ENGINEERING_RULES.join('\n') + '\n' + MEGA_INTENT_AND_VISUAL_RULES.join('\n');
   if (roleId === 'qa') return sharedSystemInstruction + '\n\n' + common + '\n\n' + QA_INSTRUCTIONS;
   const role = MEGA_ROLES[roleId];
   return sharedSystemInstruction + '\n\n' + common + '\n\n' + role.instructions.join('\n');
@@ -936,7 +948,10 @@ async function generateMegaResponse({
   };
 
   // One concise but rigorous integration audit is faster than repeated model rounds.
-  const qaPasses = fastSpecialist && tier && tier.id === 'mega-lite'
+  // A single-domain specialist already receives the full engineering contract.
+  // A second LLM round trip adds latency without adding independent expertise;
+  // reserve model-based QA for coordinated multi-specialist plans.
+  const qaPasses = fastSpecialist
     ? 0
     : (tier ? Math.min(1, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
   for (let pass = 0; pass < qaPasses && finalParsed.actions.length; pass++) {
