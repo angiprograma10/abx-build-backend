@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MEGA AI Specialist Training Example",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["specialist", "messages"],
+  "properties": {
+    "specialist": {
+      "type": "string",
+      "enum": [
+        "mega-build",
+        "mega-scripting",
+        "mega-ui",
+        "mega-fx",
+        "mega-gameplay",
+        "mega-director",
+        "mega-qa"
+      ]
+    },
+    "source_id": {
+      "type": "string",
+      "maxLength": 160
+    },
+    "license": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "messages": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "content"],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": ["system", "user", "assistant"]
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}
