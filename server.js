@@ -2323,7 +2323,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     if (error.name === 'AbortError') {
       return res.status(504).json({
         ok: false,
-        error: 'Gemini tardó demasiado. Espera un momento e inténtalo otra vez.'
+        error: 'La solicitud de IA tardó demasiado. Espera un momento e inténtalo otra vez.'
       });
     }
 
