@@ -12,7 +12,12 @@ test('recognizes each MEGA specialist identifier', () => {
     'mega-scripting',
     'mega-ui',
     'mega-fx',
-    'mega-gameplay'
+    'mega-gameplay',
+    'mega-lite',
+    'mega-lite-2',
+    'mega-lite-3-5',
+    'mega-go',
+    'mega-max'
   ]) {
     assert.equal(mega.isMegaModel(id), true, id);
   }
@@ -35,13 +40,21 @@ test('publishes five MEGA specialists and hides internal inference credentials',
     assert.equal(catalog.length, 5);
     assert.deepEqual(
       catalog.map(model => model.id),
-      ['mega-scripting', 'mega-build', 'mega-fx', 'mega-ui', 'mega-gameplay']
+      ['mega-lite', 'mega-lite-2', 'mega-lite-3-5', 'mega-go', 'mega-max']
     );
     assert.deepEqual(
       catalog.map(model => model.name),
-      ['MEGA SCRIPTING', 'MEGA BUILD', 'MEGA VFX', 'MEGA UI', 'MEGA JUEGO']
+      ['MEGA Lite', 'MEGA Lite 2.0', 'MEGA Lite 3.5', 'MEGA GO', 'MEGA MAX']
     );
-    assert.equal(catalog.every(model => model.provider === 'mega' && model.available), true);
+    assert.equal(catalog.every(model => model.provider === 'mega'), true);
+    assert.equal(catalog.filter(model => !model.requiresPaidPlan).every(model => model.available), true);
+    assert.equal(catalog.filter(model => model.requiresPaidPlan).every(model => !model.available), true);
+    assert.equal(catalog.filter(model => !model.requiresPaidPlan).length, 3);
+    assert.equal(catalog.filter(model => model.requiresPaidPlan).length, 2);
+    assert.equal(mega.isPaidMegaTier('mega-go'), true);
+    assert.equal(mega.isPaidMegaTier('mega-max'), true);
+    assert.equal(mega.isPaidMegaTier('mega-lite'), false);
+    assert.equal(mega.getMegaTier('mega-max').qaPasses, 2);
     assert.equal(catalog.some(model => model.id === 'mega-director'), false);
     assert.equal(mega.isMegaModel('mega-director'), true, 'Director remains available internally');
     assert.equal(JSON.stringify(status).includes('test-secret-that-must-not-be-returned'), false);
