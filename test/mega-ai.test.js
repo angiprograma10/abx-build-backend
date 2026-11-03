@@ -29,13 +29,19 @@ test('publishes six specialist entries without exposing secrets', () => {
     const status = mega.getMegaStatus();
     const catalog = mega.getMegaCatalog();
     assert.equal(status.configured, false);
-    assert.equal(status.models.length, 6);
-    assert.equal(catalog.length, 6);
+    assert.equal(status.models.length, 5);
+    assert.equal(catalog.length, 5);
     assert.deepEqual(
       catalog.map(model => model.id),
-      ['mega-director', 'mega-build', 'mega-scripting', 'mega-ui', 'mega-fx', 'mega-gameplay']
+      ['mega-scripting', 'mega-build', 'mega-fx', 'mega-ui', 'mega-gameplay']
+    );
+    assert.deepEqual(
+      catalog.map(model => model.name),
+      ['MEGA SCRIPTING', 'MEGA BUILD', 'MEGA VFX', 'MEGA UI', 'MEGA JUEGO']
     );
     assert.equal(catalog.every(model => model.provider === 'mega'), true);
+    assert.equal(catalog.some(model => model.id === 'mega-director'), false);
+    assert.equal(mega.isMegaModel('mega-director'), true, 'Director remains available internally');
     assert.equal(JSON.stringify(status).includes('test-secret-that-must-not-be-returned'), false);
   } finally {
     if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
