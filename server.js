@@ -2275,15 +2275,20 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     const reviewerProvider = usedProvider;
     const reviewerModel = usedModel;
     const reviewerApiKey = apiKeyForProvider(reviewerProvider);
-    parsed = await reviewConstructionDraft({
-      provider: reviewerProvider,
-      model: reviewerModel,
-      apiKey: reviewerApiKey,
-      message: effectiveMessage,
-      draft: parsed,
-      history,
-      signal: controller.signal
-    });
+    // MEGA realiza su propia revisión de geometría dentro de generateMegaResponse,
+    // usando el mismo motor configurado. El revisor genérico no conoce el provider
+    // "mega" y no debe intentar llamarlo como si fuera Gemini.
+    if (reviewerProvider !== 'mega') {
+      parsed = await reviewConstructionDraft({
+        provider: reviewerProvider,
+        model: reviewerModel,
+        apiKey: reviewerApiKey,
+        message: effectiveMessage,
+        draft: parsed,
+        history,
+        signal: controller.signal
+      });
+    }
 
     const reply = cleanText(parsed.reply, 3500) ||
       'No pude preparar una respuesta útil. Inténtalo otra vez.';
