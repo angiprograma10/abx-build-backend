@@ -152,8 +152,8 @@ function getMegaStatus() {
 
 function parseJsonContent(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return null;
-  let text = raw.replace(/^\\uFEFF/, '').trim();
-  const fenced = text.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/i);
+  let text = (raw.charCodeAt(0) === 0xFEFF ? raw.slice(1) : raw).trim();
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   if (fenced) text = fenced[1].trim();
 
   const parseCandidate = candidate => {
@@ -162,7 +162,7 @@ function parseJsonContent(raw) {
       return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
     } catch {
       try {
-        const repaired = candidate.replace(/,\\s*([}\\]])/g, '$1');
+        const repaired = candidate.replace(/,\s*([}\]])/g, '$1');
         const value = JSON.parse(repaired);
         return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
       } catch {
@@ -185,7 +185,7 @@ function parseJsonContent(raw) {
       const ch = text[end];
       if (inString) {
         if (escaped) escaped = false;
-        else if (ch === '\\\\') escaped = true;
+        else if (ch === '\\') escaped = true;
         else if (ch === '"') inString = false;
         continue;
       }
@@ -339,7 +339,7 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
         const systemText = workingMessages
           .filter(item => item && item.role === 'system' && typeof item.content === 'string')
           .map(item => item.content)
-          .join('\\n\\n');
+          .join('\n\n');
         const contents = workingMessages
           .filter(item => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string')
           .map(item => ({
