@@ -799,3 +799,44 @@ test('MEGA specialist prompts use a concise natural Roblox developer voice and b
     if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL; else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
   }
 });
+
+test('compacts oversized specialist output internally instead of asking the user to split the request', async () => {
+  const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
+  const oldModel = process.env.MEGA_BOOTSTRAP_MODEL;
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'test-model';
+  const oversized = Array.from({length:11}, (_,i) => ({type:'CREATE_PART',name:'Piece'+i,parent:'Workspace',size:[2,2,2],position:[i*3,2,0]}));
+  const compacted = Array.from({length:10}, (_,i) => ({type:'CREATE_PART',name:'Piece'+i,parent:'Workspace',size:[2,2,2],position:[i*3,2,0]}));
+  const prompts = [];
+  const responses = [
+    {reply:'Preparé las piezas.',actions:oversized},
+    {reply:'Integré las piezas dentro del límite.',actions:compacted}
+  ];
+  global.fetch = async (_url, options) => {
+    prompts.push(JSON.parse(options.body));
+    const next = responses.shift();
+    return {ok:true,status:200,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify(next)}]}}]})};
+  };
+  try {
+    const result = await mega.generateMegaResponse({
+      selectedModel:'mega-lite',
+      message:'Crea once piezas de prueba en Workspace',
+      history:[],
+      buildMode:'standard',
+      systemInstruction:'Test',
+      signal:undefined
+    });
+    assert.equal(prompts.length,2);
+    assert.match(prompts[1].contents.at(-1).parts[0].text,/INTEGRACIÓN INTERNA OBLIGATORIA/);
+    assert.equal(result.actions.length,10);
+    assert.equal(result.reply,'Integré las piezas dentro del límite.');
+  } finally {
+    global.fetch = oldFetch;
+    if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL; else process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL; else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
+  }
+});
