@@ -1920,7 +1920,7 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     return res.status(503).json({
       ok: false,
       code: 'MEGA_INFERENCE_NOT_CONFIGURED',
-      error: 'Los modelos MEGA están preparados en el backend, pero falta desplegar el servidor propio de inferencia GPU y configurar MEGA_INFERENCE_URL en Render.'
+      error: 'Los modelos MEGA están preparados, pero el motor de inferencia aún no está configurado. Conecta el servidor propio o configura el motor temporal interno en Render.'
     });
   }
 
