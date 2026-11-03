@@ -1984,6 +1984,13 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
   try {
     // Respeta estrictamente el modelo solicitado: no cambies de modelo ni proveedor
     // de forma silenciosa. Si falla, devuelve el error al usuario para que pueda decidir.
+    let response = null;
+    let payload = {};
+    let usedModel = model;
+    let usedProvider = selectedProvider;
+    let resolvedModel = null;
+    let prefetchedPayload = null;
+
     if (selectedProvider === 'mega') {
       const megaResult = await generateMegaResponse({
         selectedModel: model,
@@ -2010,13 +2017,6 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
         if (fallbackModel !== model) candidates.push({ provider: 'gemini', model: fallbackModel });
       }
     }
-
-    let response = null;
-    let payload = {};
-    let usedModel = model;
-    let usedProvider = selectedProvider;
-    let resolvedModel = null;
-    let prefetchedPayload = null;
 
     for (let i = 0; i < candidates.length; i++) {
       const candidate = candidates[i];
