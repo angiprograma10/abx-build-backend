@@ -685,7 +685,7 @@ test('uses a user-friendly failure after all structured-output repairs are exhau
 });
 
 
-test('detects collapsed house geometry and triggers a targeted repair pass', async () => {
+test('retries geometry repair internally until the house passes validation', async () => {
   const oldUrl = process.env.MEGA_INFERENCE_URL;
   const oldKey = process.env.GEMINI_API_KEY;
   const oldModel = process.env.MEGA_BOOTSTRAP_MODEL;
@@ -730,6 +730,7 @@ test('detects collapsed house geometry and triggers a targeted repair pass', asy
   };
   const responses = [
     {reply:'Te hice una casa.',actions:[weakHouse]},
+    {reply:'Ajusté la distribución.',actions:[weakHouse]},
     {reply:'Ahora sí: rehice la casa con volumen, entrada, ventanas y techo.',actions:[goodHouse]}
   ];
   const requests = [];
@@ -749,9 +750,11 @@ test('detects collapsed house geometry and triggers a targeted repair pass', asy
       systemInstruction:'Test',
       signal:undefined
     });
-    assert.equal(requests.length, 2, 'bad geometry must trigger exactly one targeted repair');
+    assert.equal(requests.length, 3, 'MEGA must retry a failed geometry repair internally');
     assert.match(requests[1].contents.at(-1).parts[0].text, /DIAGNÓSTICO GEOMÉTRICO MEDIDO/);
     assert.match(requests[1].contents.at(-1).parts[0].text, /REPARACIÓN OBLIGATORIA/);
+    assert.match(requests[2].contents.at(-1).parts[0].text, /DIAGNÓSTICO GEOMÉTRICO MEDIDO/);
+    assert.match(requests[2].contents.at(-1).parts[0].text, /REPARACIÓN OBLIGATORIA/);
     assert.equal(result.actions[0].name, 'Casa Moderna');
     assert.equal(mega.analyzeActionGeometry(result.actions, 'Haz una casa moderna')[0].issues.length, 0);
   } finally {
