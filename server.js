@@ -384,6 +384,20 @@ function validParent(value, fallback = 'Workspace') {
   return ALLOWED_PARENTS.has(value) ? value : fallback;
 }
 
+function inferStructureColor(part, index) {
+  const name = String(part && part.name || '').toLowerCase();
+  // Keep explicit model colors untouched; this fallback only fills omissions.
+  if (/ventan|window|glass|cristal/.test(name)) return 'light blue';
+  if (/techo|roof|cubierta/.test(name)) return 'dark blue';
+  if (/puerta|door|madera|wood/.test(name)) return 'brown';
+  if (/luz|light|lampara|lámpara|neon|señal|senal|acento|trim|detalle/.test(name)) return 'orange';
+  if (/pasto|grass|hoja|leaf|arbol|árbol|planta/.test(name)) return 'earth green';
+  if (/base|cimiento|foundation|piso|floor|suelo/.test(name)) return 'dark stone grey';
+  if (/pared|wall|columna|column|soporte|support/.test(name)) return 'light stone grey';
+  const palette = ['medium stone grey', 'dark stone grey', 'dark blue', 'orange'];
+  return palette[index % palette.length];
+}
+
 function layoutPosition(index, size = [4, 1, 4]) {
   // Safe fallback for a part whose intended position was omitted.
   const pitchX = Math.max(12, size[0] + 3);
@@ -441,7 +455,7 @@ function validatePart(raw, defaults = {}) {
     size,
     position,
     rotation,
-    color: COLORS.has(raw.color) ? raw.color : 'blue',
+    color: COLORS.has(raw.color) ? raw.color : (COLORS.has(defaults.color) ? defaults.color : 'blue'),
     shape: SHAPES.has(raw.shape) ? raw.shape : 'Block',
     material: MATERIALS.has(raw.material)
       ? raw.material : 'SmoothPlastic',
@@ -690,7 +704,10 @@ function validateAction(raw) {
       const parts = raw.parts.map((part, index) => {
         const safeSize = vector3(part?.size, [4, 1, 4], 0.1, 100) || [4, 1, 4];
         const fallback = layoutPosition(index, safeSize);
-        return validatePart(part, { position: fallback });
+        return validatePart(part, {
+          position: fallback,
+          color: inferStructureColor(part, index)
+        });
       });
       if (parts.some(part => !part)) return null;
 
