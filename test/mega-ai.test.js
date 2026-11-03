@@ -20,7 +20,7 @@ test('recognizes each MEGA specialist identifier', () => {
   assert.equal(mega.isMegaModel('unknown-model'), false);
 });
 
-test('publishes six specialist entries without exposing secrets', () => {
+test('publishes five MEGA specialists and hides internal inference credentials', () => {
   const oldUrl = process.env.MEGA_INFERENCE_URL;
   const oldKey = process.env.MEGA_INFERENCE_API_KEY;
   delete process.env.MEGA_INFERENCE_URL;
@@ -28,7 +28,9 @@ test('publishes six specialist entries without exposing secrets', () => {
   try {
     const status = mega.getMegaStatus();
     const catalog = mega.getMegaCatalog();
-    assert.equal(status.configured, false);
+    assert.equal(status.configured, true);
+    assert.equal(status.endpointConfigured, false);
+    assert.equal(status.runtimeMode, 'temporary-bootstrap');
     assert.equal(status.models.length, 5);
     assert.equal(catalog.length, 5);
     assert.deepEqual(
@@ -39,7 +41,7 @@ test('publishes six specialist entries without exposing secrets', () => {
       catalog.map(model => model.name),
       ['MEGA SCRIPTING', 'MEGA BUILD', 'MEGA VFX', 'MEGA UI', 'MEGA JUEGO']
     );
-    assert.equal(catalog.every(model => model.provider === 'mega'), true);
+    assert.equal(catalog.every(model => model.provider === 'mega' && model.available), true);
     assert.equal(catalog.some(model => model.id === 'mega-director'), false);
     assert.equal(mega.isMegaModel('mega-director'), true, 'Director remains available internally');
     assert.equal(JSON.stringify(status).includes('test-secret-that-must-not-be-returned'), false);
@@ -53,7 +55,9 @@ test('publishes six specialist entries without exposing secrets', () => {
 
 test('rejects generation clearly when the self-hosted endpoint is missing', async () => {
   const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
   delete process.env.MEGA_INFERENCE_URL;
+  delete process.env.GEMINI_API_KEY;
   try {
     await assert.rejects(
       () => mega.generateMegaResponse({
@@ -68,5 +72,55 @@ test('rejects generation clearly when the self-hosted endpoint is missing', asyn
     );
   } finally {
     if (oldUrl !== undefined) process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey !== undefined) process.env.GEMINI_API_KEY = oldKey;
+  }
+});
+
+test('runs a MEGA specialist through the temporary runtime when no GPU endpoint exists', async () => {
+  const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
+  const oldModel = process.env.MEGA_BOOTSTRAP_MODEL;
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'test-model';
+  let captured = null;
+  global.fetch = async (url, options) => {
+    captured = { url, options };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{
+          content: {
+            parts: [{ text: JSON.stringify({ reply: 'Especialista listo', actions: [] }) }]
+          }
+        }]
+      })
+    };
+  };
+  try {
+    const result = await mega.generateMegaResponse({
+      selectedModel: 'mega-build',
+      message: 'Analiza una construcción',
+      history: [],
+      buildMode: 'standard',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+    assert.equal(result.reply, 'Especialista listo');
+    assert.equal(result.modelUsed, 'MEGA BUILD');
+    assert.match(captured.url, /test-model:generateContent$/);
+    assert.equal(captured.options.headers['x-goog-api-key'], 'temporary-test-key');
+    assert.equal(JSON.parse(captured.options.body).generationConfig.responseMimeType, 'application/json');
+    assert.equal(result.agentTrace[0].model, 'MEGA_TEMPORARY_BASE');
+  } finally {
+    global.fetch = oldFetch;
+    if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
+    else process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL;
+    else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
   }
 });
