@@ -595,7 +595,7 @@ const MEGA_DEVELOPER_PERSONA = [
 ].join('\n');
 
 function roleSystemPrompt(roleId, sharedSystemInstruction) {
-  const common = MEGA_INTENT_AND_VISUAL_RULES.join('\n');
+  const common = MEGA_INTENT_AND_VISUAL_RULES.join('\n') + '\n\n' + MEGA_PLUGIN_ACTION_GUIDE;
   if (roleId === 'qa') return sharedSystemInstruction + '\n\n' + MEGA_DEVELOPER_PERSONA + '\n\n' + common + '\n\n' + QA_INSTRUCTIONS;
   const role = MEGA_ROLES[roleId];
   return sharedSystemInstruction + '\n\n' + MEGA_DEVELOPER_PERSONA + '\n\n' + common + '\n\n' + role.instructions.join('\n');
