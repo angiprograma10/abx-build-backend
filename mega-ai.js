@@ -9,6 +9,8 @@ const MEGA_ROLES = Object.freeze({
       'Eres MEGA DIRECTOR. Eres el coordinador que convierte una petición grande en tareas verificables para especialistas.',
       'Nunca pidas al usuario que divida, reduzca o vuelva a formular una petición grande. La descomposición en tareas, fases y entregas es responsabilidad interna de MEGA DIRECTOR; coordina especialistas y presenta una única entrega integrada. Si el alcance supera un límite técnico, reorganiza y compacta internamente antes de responder.',
       'Descompón el proyecto en tareas para mega-build, mega-scripting, mega-ui, mega-fx y mega-gameplay. No delegues tareas que no se necesitan. Detecta primero el estado y las restricciones del proyecto; no asumas que el lugar está vacío.',
+      'Cuando el usuario pida crear un JUEGO o una experiencia jugable, interpreta el resultado completo, no solo la frase literal de la mecánica. Deduce las piezas de soporte imprescindibles: lógica autoritativa, estado/progreso, HUD para métricas que el jugador necesita ver y feedback claro al recibir recompensas. Para monedas por paso, por ejemplo, considera contador de pasos + contador total de monedas + actualización inmediata y una pequeña animación de recompensa. Incluye sonido solo si existe un asset real obtenido por una capacidad de Toolbox disponible; jamás inventes IDs. No añadas tiendas, mascotas, rebirths, mapas ni sistemas ajenos a la petición.',
+      'Para solicitudes de CORRECCIÓN o AÑADIR AL PROYECTO, planifica una modificación incremental: conserva scripts, nombres, rutas, UI y objetos existentes que no estén dentro del alcance. Reutiliza sistemas existentes y delega únicamente el cambio solicitado y sus dependencias mínimas. Una reparación no autoriza reconstruir el proyecto.',
       'Ordena las tareas por dependencias reales. Cada tarea debe indicar objetivo, entregables, nombres y rutas compartidos y criterios de aceptación comprobables. Evita duplicados y conflictos entre especialistas.',
       'No generes acciones de Roblox en esta fase. Devuelve solo JSON: {"reply":"resumen breve","projectBrief":"contexto compartido","tasks":[{"specialist":"mega-build","task":"objetivo concreto","dependsOn":[]}]}',
       'Si la petición es una pregunta o no necesita varios especialistas, devuelve tasks:[] y responde brevemente en reply.',
@@ -44,6 +46,7 @@ const MEGA_ROLES = Object.freeze({
       'No sustituyas una implementación por un ejemplo genérico. Usa los nombres, rutas, valores, eventos y requisitos concretos de esta petición. Cada evento debe conectarse y producir un resultado observable; no dejes funciones vacías, marcadores TODO ni referencias a objetos que no creaste o que no existan en el contexto.',
       'Nunca inventes APIs, assets, IDs, módulos externos o instancias no presentes en el contexto o en las acciones previas.',
       'Conecta entrada → validación → cambio de estado → resultado visible. No dejes eventos sin conectar ni UI sin comportamiento cuando se requiera.',
+      'Para recompensas por pasos o movimiento, no sumes monedas cada frame ni confíes en un contador enviado por el cliente. Implementa una medición discreta y razonable del desplazamiento válido en servidor, descarta movimiento en el aire/teletransportes evidentes y evita recompensas duplicadas. Reutiliza leaderstats/valores existentes si están presentes; no crees otro sistema paralelo.',
       'Respeta el límite de 10000 caracteres por script. Devuelve únicamente {"reply":"...","actions":[...]}.'
     ]
   },
@@ -58,6 +61,7 @@ const MEGA_ROLES = Object.freeze({
       'Aplica una paleta visual intencional de 2 a 4 colores: fondo, superficie/panel, color principal y acento. Define BackgroundColor3, TextColor3, BorderColor3 y propiedades de esquina/borde cuando estén admitidas. Mantén contraste alto, tipografía legible, espaciado consistente y estados normal/hover/disabled si el esquema permite implementarlos.',
       'Usa tamaños UDim2 correctos y evita solapamientos. No combines UIListLayout/UIGridLayout con Position manual en los mismos hijos. Respeta los límites reales de CREATE_TREE.',
       'Cada control solicitado debe tener un contrato de interacción para que MEGA SCRIPTING pueda conectarlo. No afirmes que un botón funciona si solo creaste su apariencia.',
+      'Cuando una mecánica nueva dependa de monedas, pasos, puntos, tiempo o progreso, considera un HUD que muestre las métricas centrales aunque el usuario no enumere cada TextLabel. Para recompensas, diseña feedback breve y útil: actualización del total, indicador temporal como +1 y una animación pequeña con TweenService. No inventes sonidos ni IDs; usa solo un SoundId real resuelto por Toolbox si el plugin lo proporciona.',
       'Devuelve únicamente JSON válido con {"reply":"...","actions":[...]}.'
     ]
   },
@@ -67,7 +71,8 @@ const MEGA_ROLES = Object.freeze({
     env: 'MEGA_FX_MODEL',
     instructions: [
       'Eres MEGA VFX, especialista en efectos visuales de Roblox Studio.',
-      'Diseña una identidad visual coherente mediante iluminación, Atmosphere, Bloom, ColorCorrection, ParticleEmitter, Beam, Trail, Highlight y efectos admitidos.',
+      'Diseña una identidad visual coherente mediante iluminación, Atmosphere, Bloom, ColorCorrection, ParticleEmitter, Beam, Trail, Highlight, sonidos y efectos admitidos.',
+      'El sonido es feedback funcional, no decoración aleatoria. Solo configura un Sound con un SoundId que haya sido proporcionado o resuelto realmente por una integración de Toolbox disponible; no inventes IDs ni afirmes haber consultado la Toolbox cuando no ocurrió.',
       'Asocia cada efecto a un objeto, evento o ubicación concreta. Define color, intensidad, duración, emisión, rango y condiciones de activación cuando la propiedad esté soportada. Prioriza rendimiento, activación por evento y limpieza al terminar.',
       'No inventes IDs de texturas, sonidos, meshes ni assets externos. No sustituyas mecánicas por efectos visuales.',
       'Evita saturar la escena con Neon o partículas constantes que perjudiquen el rendimiento. Devuelve únicamente JSON con {"reply":"...","actions":[...]}.'
@@ -80,6 +85,7 @@ const MEGA_ROLES = Object.freeze({
     instructions: [
       'Eres MEGA JUEGO, diseñador de sistemas y experiencia jugable para Roblox.',
       'Define el bucle de juego como una máquina de estados: inicio, objetivo, acción del jugador, reglas, estado autoritativo, feedback, éxito/fracaso, recompensa única y reinicio. Anticipa respawn, multijugador y recompensas duplicadas.',
+      'Al crear un juego desde cero, deriva los sistemas mínimos que hacen comprensible y jugable la mecánica. Si el usuario pide ganar monedas por cada paso, especifica como mínimo: detección de pasos válidos, contador de pasos, recompensa de 1 coin por paso, total de coins y feedback visible. Si pide monedas por salto, utiliza el salto normal del personaje y no construyas trampolines. Mantén fuera cualquier sistema adicional no pedido.',
       'Anticipa casos límite, multijugador, concurrencia, exploits, balance y persistencia solo cuando se solicite y las capacidades existan.',
       'Coordina nombres de objetos, eventos, valores y contratos para los otros especialistas. No inventes objetos ya construidos.',
       'No confundas una descripción de mecánica con su implementación. Devuelve únicamente JSON con {"reply":"...","actions":[...]}.'
@@ -96,10 +102,10 @@ const MEGA_TIERS = Object.freeze({
     priceLabel: 'GRATIS',
     requiresPaidPlan: false,
     note: 'Tareas rápidas: scripts, correcciones, ajustes y construcciones concretas.',
-    maxTasks: 2,
-    maxActions: 10,
-    directorTokens: 1900,
-    specialistTokens: 4300,
+    maxTasks: 4,
+    maxActions: 16,
+    directorTokens: 2400,
+    specialistTokens: 4800,
     qaPasses: 0,
     qaTokens: 0,
     instruction: 'Prioriza velocidad y claridad. Utiliza hasta dos especialistas, eligiendo los más relevantes. Resuelve por completo el alcance pequeño solicitado; no añadas sistemas o decoración que no aporten.'
@@ -111,10 +117,10 @@ const MEGA_TIERS = Object.freeze({
     priceLabel: 'GRATIS',
     requiresPaidPlan: false,
     note: 'Trabajos medianos: sistemas, interfaces y construcciones más detalladas.',
-    maxTasks: 3,
-    maxActions: 18,
-    directorTokens: 2500,
-    specialistTokens: 6000,
+    maxTasks: 4,
+    maxActions: 22,
+    directorTokens: 2900,
+    specialistTokens: 6500,
     qaPasses: 1,
     qaTokens: 4200,
     instruction: 'Planifica trabajos medianos. Coordina hasta tres especialistas según dependencias. Incluye una revisión final de coherencia de acciones, rutas, geometría y comportamiento.'
@@ -205,6 +211,34 @@ const QA_INSTRUCTIONS = [
   'Respeta el contrato: {"reply":"...","actions":[...]}. Máximo 30 acciones, 60 piezas por CREATE_STRUCTURE, 300 nodos por CREATE_TREE y 10000 caracteres por script.',
   'Si una parte no se puede implementar con el esquema, conserva lo compatible y dilo en reply. Nunca afirmes que ejecutaste pruebas en Roblox Studio.'
 ].join('\n');
+
+const MEGA_CHANGE_MODE_RULES = [
+  'CONTINUIDAD DEL PROYECTO — REGLA OBLIGATORIA PARA TODOS LOS ESPECIALISTAS:',
+  'Antes de proponer acciones, identifica si la petición es CREATE, EDIT o REPAIR. Usa el historial de conversación disponible para conservar el objetivo, nombres, rutas, sistemas y decisiones ya establecidos.',
+  'EDIT: modifica solo el componente pedido y las dependencias estrictamente necesarias. Reutiliza monedas, leaderstats, remotos, módulos, interfaces y carpetas existentes cuando el contexto indique que ya existen. No crees copias paralelas ni vuelvas a generar el proyecto completo.',
+  'REPAIR: primero identifica la causa probable y el objeto/script concreto. Corrige el origen con el cambio mínimo. Conserva todo lo que funciona. No elimines objetos ni reemplaces sistemas completos como solución predeterminada.',
+  'CREATE: construye lo que falta para cumplir el nuevo objetivo, sin duplicar sistemas o componentes que el contexto indique que ya existen.',
+  'Nunca uses DELETE_INSTANCE, reconstrucción completa, reemplazos globales ni cambios de apariencia fuera del alcance, salvo que el usuario lo haya pedido explícitamente.',
+  'No inventes que inspeccionaste el Explorer o el contenido de scripts. Si no tienes el estado real del objeto, trabaja con el contexto disponible y no adivines rutas específicas; pide únicamente el dato imprescindible cuando no exista una modificación segura.',
+  'Antes de entregar, compara el plan con el estado previo conocido: cada acción debe ser nueva o una modificación justificada; no repitas acciones ya aplicadas ni recrees objetos existentes.'
+].join('\n');
+
+function classifyChangeMode(message) {
+  const text = String(message || '');
+  if (/\b(arregla|arreglar|corrige|corregir|repara|reparar|soluciona|solucionar|depura|depurar|debug|fix|no funciona|sigue fallando|error)\b/i.test(text)) return 'REPAIR';
+  if (/\b(agrega|agregar|añade|anade|añadir|incorpora|incorporar|modifica|modificar|actualiza|actualizar|cambia|cambiar|mejora|mejorar|quita|quitar|elimina|eliminar)\b/i.test(text)) return 'EDIT';
+  if (/\b(crea|crear|construye|construir|diseña|disenar|desarrolla|desarrollar|genera|generar|haz|hacer|build|create)\b/i.test(text)) return 'CREATE';
+  return 'ANALYZE';
+}
+
+function changeModeDirective(mode) {
+  if (mode === 'REPAIR') return 'MODO REPAIR DETECTADO: diagnostica antes de tocar. Localiza el fallo a partir del historial y del contexto suministrado. Devuelve solo las acciones puntuales para reparar la causa, sin reconstruir sistemas o interfaces completas.';
+  if (mode === 'EDIT') return 'MODO EDIT DETECTADO: aplica una actualización incremental. Conserva estructura y comportamiento existente; añade o modifica solo lo solicitado y conecta la nueva pieza con los sistemas actuales.';
+  if (mode === 'CREATE') return 'MODO CREATE DETECTADO: crea el resultado solicitado y deduce solo los elementos de soporte imprescindibles para que sea funcional, comprensible y visible para el jugador.';
+  return 'MODO ANALYZE DETECTADO: responde o inspecciona el problema sin generar cambios que el usuario no haya pedido.';
+}
+
+
 
 function isMegaModel(model) {
   return model === 'mega-director' ||
@@ -740,8 +774,18 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
   return { parsed, model };
 }
 
+function isNewGameCreationRequest(message) {
+  const text = String(message || '');
+  const hasGame = /\b(juego|game|simulador|simulator|obby|tycoon|rpg|experiencia jugable)\b/i.test(text);
+  const hasCreateVerb = /\b(haz|hacer|crea|crear|construye|construir|desarrolla|desarrollar|diseña|disenar|genera|generar|build|create)\b/i.test(text);
+  return hasGame && hasCreateVerb && classifyChangeMode(text) === 'CREATE';
+}
+
 function inferFastSpecialist(message) {
   const text = String(message || '').toLowerCase();
+  // Multi-domain game creation must go through the Director, even when its
+  // core mechanic looks like a single scripting task.
+  if (isNewGameCreationRequest(text)) return '';
   // Long but clearly single-discipline requests should still use the fast lane.
   // Mixed-domain and full-game requests are handled by the director instead.
   if (!text || text.length > 1400) return '';
@@ -840,6 +884,9 @@ function fallbackSpecialists(message) {
   } else if (/script|program|evento|funcion|función|remote|luau|codigo|código|sistema|arregl|error|depur/i.test(text)) {
     tasks.push({ specialist: 'mega-scripting', task: 'Implementa o corrige los scripts, eventos y sistemas solicitados.', dependsOn: [] });
   }
+  if (isNewGameCreationRequest(text) && !tasks.some(task => task.specialist === 'mega-ui')) {
+    tasks.push({ specialist: 'mega-ui', task: 'Diseña el HUD mínimo necesario para mostrar el estado principal del juego, sus métricas y el feedback de las recompensas. Conéctalo usando nombres y rutas compartidos; no agregues sistemas opcionales.', dependsOn: ['mega-gameplay', 'mega-scripting'] });
+  }
   return tasks.slice(0, 5);
 }
 
@@ -853,6 +900,7 @@ async function generateMegaResponse({
   maxActions = 30
 }) {
   const normalizedHistory = normalizeHistory(history);
+  const changeMode = classifyChangeMode(message);
   const tier = getMegaTier(selectedModel);
   const fastSpecialist = tier && buildMode !== 'full-game'
     ? inferFastSpecialist(message)
@@ -862,12 +910,12 @@ async function generateMegaResponse({
     (Boolean(tier) && !fastSpecialist);
   const actionLimit = tier ? Math.min(maxActions, tier.maxActions) : maxActions;
   const taskLimit = tier ? tier.maxTasks : 5;
-  const tierSystemInstruction = tier
+  const tierSystemInstruction = (tier
     ? systemInstruction + '\n\nPERFIL DE BOT ' + tier.name.toUpperCase() + ':\n' +
       tier.instruction + '\nLímite de especialistas coordinados: ' + taskLimit +
       '. Límite de acciones del plan: ' + actionLimit +
       '. Prioriza una entrega completa y concreta, con explicaciones breves. Todas las especialidades MEGA están disponibles internamente; selecciona solo las que realmente aporten. Exige criterios de aceptación verificables, conserva un contrato compartido de nombres y rutas, y revisa la coherencia antes de devolver el resultado.'
-    : systemInstruction;
+    : systemInstruction) + '\n\n' + MEGA_CHANGE_MODE_RULES + '\n\n' + changeModeDirective(changeMode);
 
   let tasks;
   let projectBrief = '';
@@ -888,6 +936,7 @@ async function generateMegaResponse({
           '\n\nMODO:\n' + (buildMode === 'full-game'
             ? 'Juego completo: reúne las especialidades necesarias para un MVP coherente.'
             : 'Utiliza solamente las especialidades necesarias.') +
+          '\n\nINTELIGENCIA DE JUEGO: si la petición crea un juego con una mecánica de progreso/recompensa, considera HUD y feedback para las métricas que el jugador necesita entender; no te limites a generar el script central. Para añadir o corregir, conserva lo existente y no reconstruyas.' +
           '\n\nPERFIL Y LÍMITES:\n' + (tier
             ? tier.name + ': ' + tier.instruction
             : 'Utiliza hasta cinco tareas.') +
@@ -1123,6 +1172,8 @@ module.exports = {
   getMegaCatalog,
   getMegaStatus,
   inferFastSpecialist,
+  isNewGameCreationRequest,
+  classifyChangeMode,
   analyzeActionGeometry,
   generateMegaResponse
 };
