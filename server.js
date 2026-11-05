@@ -343,6 +343,130 @@ const COLORS = new Set([
   'bright blue', 'bright yellow', 'bright orange'
 ]);
 
+const EXTENDED_ACTION_TYPES = new Set([
+  'CREATE_SPAWN_SET',
+  'CREATE_HIGHLIGHT',
+  'CREATE_CLICK_DETECTOR',
+  'CREATE_BILLBOARD_GUI',
+  'CREATE_SURFACE_GUI',
+  'CREATE_WELD',
+  'CREATE_BEAM',
+  'CREATE_TRAIL',
+  'CREATE_PARTICLE_EMITTER',
+  'CREATE_PATH_NODES',
+  'CREATE_ZONE',
+  'CREATE_SOUND_GROUP',
+  'CREATE_SOUNDSCAPE',
+  'CREATE_ANIMATION_SET',
+  'CREATE_REMOTE_BUNDLE',
+  'CREATE_VALUE_BUNDLE',
+  'CREATE_ATTRIBUTE_SET',
+  'BATCH_SET_PROPERTIES',
+  'PIVOT_MODEL',
+  'SET_MODEL_PRIMARY_PART',
+  'SET_COLLISION_GROUP',
+  'SET_COLLISION_RELATIONSHIP',
+  'CREATE_UI_STROKE',
+  'CREATE_UI_GRADIENT',
+  'CREATE_UI_PADDING',
+  'CREATE_UI_LAYOUT',
+  'CREATE_UI_CORNER',
+  'CREATE_UI_BUTTON',
+  'CREATE_UI_CARD',
+  'CREATE_UI_PROGRESS_BAR',
+  'CREATE_UI_STAT_CARD',
+  'CREATE_UI_INPUT',
+  'CREATE_UI_IMAGE',
+  'CREATE_UI_OVERLAY',
+  'CREATE_UI_SCROLL_LIST',
+  'CREATE_UI_PANEL',
+  'CREATE_UI_SECTION',
+  'CREATE_UI_TABS',
+  'CREATE_UI_GRID',
+  'CREATE_UI_SIZE_CONSTRAINT',
+  'CREATE_UI_ASPECT_RATIO',
+  'CREATE_UI_SCALE',
+  'SET_UI_VISIBILITY',
+  'SET_UI_LAYOUT_ORDER',
+  'SET_UI_ZINDEX',
+  'SET_UI_AUTOMATIC_SIZE',
+  'CREATE_PART_GRID',
+  'CREATE_STAIRS',
+  'CREATE_RING',
+  'CREATE_WALL',
+  'CREATE_COLLECTIBLES',
+  'CREATE_SHOP_CATALOG',
+  'CREATE_QUEST_CATALOG',
+  'CREATE_ROUND_CONFIG',
+  'CREATE_CURRENCY_CONFIG',
+  'CREATE_PROGRESSION_CONFIG',
+  'CREATE_CHECKPOINT_MARKERS',
+  'CREATE_MOVING_PLATFORM',
+  'CREATE_PORTAL_PAIR',
+  'CREATE_TEAM_SET',
+  'CREATE_TEAM_SPAWNS',
+  'CREATE_SOUND_EMITTER',
+  'CREATE_DECAL',
+  'CREATE_TEXTURE',
+  'SET_SELECTION_MATERIAL',
+  'SET_SELECTION_COLOR',
+  'SET_SELECTION_ANCHORED',
+  'SET_SELECTION_COLLISION',
+  'SET_SELECTION_TRANSPARENCY',
+  'SET_SELECTION_REFLECTANCE',
+  'SET_SELECTION_SCALE',
+  'OFFSET_SELECTION',
+  'ROTATE_SELECTION',
+  'DUPLICATE_SELECTION',
+  'RENAME_INSTANCES',
+  'FIND_BY_ATTRIBUTE',
+  'INSPECT_HIERARCHY',
+  'REPORT_PERFORMANCE',
+  'AUDIT_SCRIPTS_EXTENDED',
+  'AUDIT_GUI_RESPONSIVE',
+  'CREATE_PROJECT_MANIFEST',
+  'INSPECT_MODEL_BOUNDS',
+  'PIVOT_MODEL_TO_TARGET',
+  'CREATE_MODEL_FROM_SELECTION',
+  'CREATE_FOLDER_TREE',
+  'CREATE_SYSTEM_SCAFFOLD',
+  'CREATE_SERVER_CLIENT_SCAFFOLD',
+  'CREATE_DATA_SCHEMA',
+  'CREATE_TIMER_CONFIG',
+  'CREATE_LEADERBOARD_CONFIG',
+  'CREATE_NPC_MARKER',
+  'CREATE_SEAT',
+  'CREATE_CAMERA',
+  'CREATE_WORLD_MODEL',
+  'CREATE_SURFACE_APPEARANCE',
+  'CREATE_ASSET_MANIFEST',
+  'SET_STREAMING_SETTINGS',
+  'CREATE_SELECTION_BOUNDS',
+  'ADD_TAG_TO_SELECTION',
+  'ADD_ATTRIBUTE_TO_SELECTION',
+  'CREATE_UI_STAT_HUD',
+  'CREATE_UI_TOAST',
+  'CREATE_UI_CONFIRM_DIALOG',
+  'CREATE_POST_EFFECT',
+  'CREATE_ATMOSPHERE',
+  'CREATE_PART_SET',
+  'CREATE_FOLDER_BATCH',
+  'CREATE_PART_FROM_BOUNDS',
+  'INSPECT_SELECTION_REPORT',
+  'REPORT_WORLD_BOUNDS',
+  'REPORT_COLLECTION_TAGS',
+  'REPORT_LIGHTING',
+  'REPORT_SOUNDS',
+  'REPORT_TERRAIN',
+  'LIST_EXTENDED_CAPABILITIES',
+  'LIST_EXTENDED_CONTRACTS',
+  'LIST_EXTENDED_PLAYBOOKS',
+  'LIST_EXTENDED_RECIPES',
+  'REPORT_EXTENDED_CONTRACT_SUMMARY',
+  'RUN_EXTENDED_SELF_TESTS',
+  'REPORT_EXTENDED_REGRESSION_MATRIX',
+]);
+
 const ALLOWED_ACTIONS = new Set([
   'CREATE_PART', 'CREATE_GUI', 'CREATE_STRUCTURE',
   'CREATE_SCRIPT', 'CREATE_FOLDER', 'CREATE_VALUE',
@@ -350,7 +474,8 @@ const ALLOWED_ACTIONS = new Set([
   'CREATE_TREE', 'SET_PROPERTIES', 'SET_ATTRIBUTE',
   'DELETE_INSTANCE', 'MOVE_INSTANCE', 'DUPLICATE_INSTANCE',
   'INSPECT_PATH', 'FIND_INSTANCES', 'INSPECT_PROJECT',
-  'INSPECT_SELECTION'
+  'INSPECT_SELECTION',
+  ...EXTENDED_ACTION_TYPES
 ]);
 
 function cleanText(value, max = 500) {
@@ -669,6 +794,163 @@ function validPath(value) {
   return path;
 }
 
+
+function sanitizeExtendedValue(value, depth = 0) {
+  if (depth > 12) return { invalid: true };
+  if (value === null || typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && Math.abs(value) <= 1e9
+      ? value : { invalid: true };
+  }
+  if (typeof value === 'string') {
+    return value.length <= 20000 ? value : { invalid: true };
+  }
+  if (Array.isArray(value)) {
+    if (value.length > 500) return { invalid: true };
+    const result = value.map(item => sanitizeExtendedValue(item, depth + 1));
+    return result.some(item => isObject(item) && item.invalid === true)
+      ? { invalid: true } : result;
+  }
+  if (isObject(value)) {
+    const entries = Object.entries(value);
+    if (entries.length > 120) return { invalid: true };
+    const result = {};
+    for (const [key, item] of entries) {
+      if (!/^[A-Za-z0-9_]{1,100}$/.test(key)) return { invalid: true };
+      const clean = sanitizeExtendedValue(item, depth + 1);
+      if (isObject(clean) && clean.invalid === true) return { invalid: true };
+      result[key] = clean;
+    }
+    return result;
+  }
+  return { invalid: true };
+}
+
+const EXTENDED_REQUIRED_FIELDS = Object.freeze({
+  CREATE_SPAWN_SET: ['points'],
+  CREATE_HIGHLIGHT: ['target'],
+  CREATE_CLICK_DETECTOR: ['target'],
+  CREATE_BILLBOARD_GUI: ['target','text'],
+  CREATE_SURFACE_GUI: ['target','text'],
+  CREATE_WELD: ['part0','part1'],
+  CREATE_BEAM: ['part0','part1'],
+  CREATE_TRAIL: ['part0'],
+  CREATE_PARTICLE_EMITTER: ['target'],
+  CREATE_PATH_NODES: ['nodes'],
+  CREATE_ZONE: ['size','position'],
+  CREATE_ANIMATION_SET: ['animations'],
+  CREATE_VALUE_BUNDLE: ['values'],
+  CREATE_ATTRIBUTE_SET: ['target','attributes'],
+  BATCH_SET_PROPERTIES: ['targets','properties'],
+  PIVOT_MODEL: ['target'],
+  SET_MODEL_PRIMARY_PART: ['target','primaryPart'],
+  SET_COLLISION_GROUP: ['groupName','targets'],
+  SET_COLLISION_RELATIONSHIP: ['group0','group1'],
+  CREATE_UI_STROKE: ['target'],
+  CREATE_UI_GRADIENT: ['target'],
+  CREATE_UI_PADDING: ['target'],
+  CREATE_UI_LAYOUT: ['target'],
+  CREATE_UI_CORNER: ['target'],
+  CREATE_UI_BUTTON: ['parent','text'],
+  CREATE_UI_CARD: ['parent','title'],
+  CREATE_UI_PROGRESS_BAR: ['parent'],
+  CREATE_UI_STAT_CARD: ['parent','label'],
+  CREATE_UI_INPUT: ['parent'],
+  CREATE_UI_IMAGE: ['parent','image'],
+  CREATE_UI_SCROLL_LIST: ['parent'],
+  CREATE_UI_SECTION: ['parent','title'],
+  CREATE_UI_TABS: ['parent','tabs'],
+  CREATE_UI_GRID: ['parent'],
+  CREATE_UI_SIZE_CONSTRAINT: ['parent'],
+  CREATE_UI_ASPECT_RATIO: ['parent'],
+  CREATE_UI_SCALE: ['parent'],
+  SET_UI_VISIBILITY: ['target'],
+  SET_UI_LAYOUT_ORDER: ['target','order'],
+  SET_UI_ZINDEX: ['target','zIndex'],
+  SET_UI_AUTOMATIC_SIZE: ['target'],
+  CREATE_PART_GRID: ['rows','columns'],
+  CREATE_STAIRS: ['count'],
+  CREATE_RING: ['count','radius'],
+  CREATE_WALL: ['count'],
+  CREATE_COLLECTIBLES: ['items'],
+  CREATE_SHOP_CATALOG: ['items'],
+  CREATE_QUEST_CATALOG: ['quests'],
+  CREATE_CHECKPOINT_MARKERS: ['points'],
+  CREATE_MOVING_PLATFORM: ['nodes'],
+  CREATE_TEAM_SET: ['teams'],
+  CREATE_TEAM_SPAWNS: ['teams'],
+  CREATE_SOUND_EMITTER: ['target','soundId'],
+  CREATE_DECAL: ['target','texture'],
+  CREATE_TEXTURE: ['target','texture'],
+  SET_SELECTION_MATERIAL: ['material'],
+  SET_SELECTION_COLOR: ['color'],
+  SET_SELECTION_ANCHORED: ['anchored'],
+  SET_SELECTION_COLLISION: ['canCollide'],
+  SET_SELECTION_TRANSPARENCY: ['transparency'],
+  SET_SELECTION_REFLECTANCE: ['reflectance'],
+  SET_SELECTION_SCALE: ['factor'],
+  OFFSET_SELECTION: ['offset'],
+  ROTATE_SELECTION: ['degrees'],
+  RENAME_INSTANCES: ['targets'],
+  FIND_BY_ATTRIBUTE: ['attribute'],
+  INSPECT_HIERARCHY: ['target'],
+  INSPECT_MODEL_BOUNDS: ['target'],
+  PIVOT_MODEL_TO_TARGET: ['target','reference'],
+  CREATE_FOLDER_TREE: ['tree'],
+  CREATE_DATA_SCHEMA: ['fields'],
+  CREATE_LEADERBOARD_CONFIG: ['stats'],
+  CREATE_SURFACE_APPEARANCE: ['target'],
+  CREATE_ASSET_MANIFEST: ['assets'],
+  ADD_TAG_TO_SELECTION: ['tag'],
+  ADD_ATTRIBUTE_TO_SELECTION: ['name','value'],
+  CREATE_PART_SET: ['parts'],
+  CREATE_FOLDER_BATCH: ['names'],
+  CREATE_PART_FROM_BOUNDS: ['target']
+});
+
+function validateExtendedAction(raw) {
+  if (!isObject(raw) || !EXTENDED_ACTION_TYPES.has(raw.type)) return null;
+  let encoded;
+  try { encoded = JSON.stringify(raw); } catch { return null; }
+  if (typeof encoded !== 'string' || encoded.length > 128 * 1024) return null;
+  const cloned = sanitizeExtendedValue(raw);
+  if (!isObject(cloned) || cloned.invalid === true) return null;
+
+  const required = EXTENDED_REQUIRED_FIELDS[raw.type] || [];
+  for (const key of required) {
+    if (cloned[key] === undefined || cloned[key] === null) return null;
+  }
+
+  const pathFields = ['target','path','part0','part1','primaryPart','reference','model','template','valuePath','root'];
+  for (const key of pathFields) {
+    if (cloned[key] !== undefined && typeof cloned[key] === 'string' && !validPath(cloned[key])) return null;
+  }
+  if (cloned.parent !== undefined && typeof cloned.parent === 'string' && !validPath(cloned.parent)) return null;
+  for (const key of ['targets','roots']) {
+    if (cloned[key] !== undefined) {
+      if (!Array.isArray(cloned[key]) || cloned[key].length > 500 ||
+          cloned[key].some(path => typeof path !== 'string' || !validPath(path))) return null;
+    }
+  }
+
+  const assetFields = ['soundId','animationId','texture','image','colorMap','metalnessMap','normalMap','roughnessMap'];
+  for (const key of assetFields) {
+    const value = cloned[key];
+    if (value !== undefined && value !== '' &&
+        (typeof value !== 'string' || !/^rbxassetid:\/\/\d+$/.test(value))) return null;
+  }
+
+  // Per-family caps protect the Studio plugin from oversized nested operations.
+  const caps = {points:100,nodes:200,parts:500,items:500,quests:300,teams:50,
+    remotes:100,values:200,fields:200,assets:500,animations:200,scripts:50,
+    targets:500,attachments:100,faces:6,zones:100,panels:50,tabs:20,names:100};
+  for (const [key, max] of Object.entries(caps)) {
+    if (cloned[key] !== undefined &&
+        (!Array.isArray(cloned[key]) || cloned[key].length > max)) return null;
+  }
+  return cloned;
+}
+
 function validateAction(raw) {
   if (!isObject(raw) || !ALLOWED_ACTIONS.has(raw.type)) return null;
 
@@ -924,7 +1206,7 @@ function validateAction(raw) {
       return { type: raw.type };
 
     default:
-      return null;
+      return validateExtendedAction(raw);
   }
 }
 
