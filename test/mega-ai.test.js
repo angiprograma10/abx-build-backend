@@ -181,6 +181,11 @@ test('includes strict scope fidelity and intentional color rules in director and
     assert.match(specialistSystem, /paleta armónica de 2 a 4 colores/);
     assert.match(specialistTask, /PETICIÓN ORIGINAL/);
     assert.equal(mega.inferFastSpecialist('Por cada salto que dé el jugador, gana 5 coins.'), 'mega-scripting');
+    assert.equal(mega.inferFastSpecialist('Haz un juego de que por cada paso que doy gane 1 coin.'), '');
+    assert.equal(mega.isNewGameCreationRequest('Haz un juego de que por cada paso que doy gane 1 coin.'), true);
+    assert.equal(mega.classifyChangeMode('Arregla el error del contador.'), 'REPAIR');
+    assert.equal(mega.classifyChangeMode('Añade una tienda al juego.'), 'EDIT');
+    assert.equal(mega.classifyChangeMode('Crea un juego de monedas.'), 'CREATE');
   } finally {
     global.fetch = oldFetch;
     if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
@@ -838,5 +843,72 @@ test('compacts oversized specialist output internally instead of asking the user
     if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL; else process.env.MEGA_INFERENCE_URL = oldUrl;
     if (oldKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = oldKey;
     if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL; else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
+  }
+});
+
+
+test('routes a new step-reward game through Director, gameplay, scripting, and UI', async () => {
+  const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
+  const oldModel = process.env.MEGA_BOOTSTRAP_MODEL;
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'test-model';
+
+  const responses = [
+    {
+      reply: 'Plan de juego completo.',
+      projectBrief: 'Juego de pasos con monedas y HUD.',
+      tasks: [
+        { specialist: 'mega-gameplay', task: 'Define los pasos válidos y la recompensa por paso.', dependsOn: [] },
+        { specialist: 'mega-scripting', task: 'Implementa la lógica de servidor y actualización de estado.', dependsOn: [] },
+        { specialist: 'mega-ui', task: 'Construye el HUD de pasos y monedas con feedback de recompensa.', dependsOn: [] }
+      ]
+    },
+    { reply: 'Reglas del juego listas.', actions: [] },
+    { reply: 'Sistema de pasos y monedas listo.', actions: [] },
+    { reply: 'HUD y feedback listos.', actions: [] }
+  ];
+  const requests = [];
+  global.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    const next = responses.shift();
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify(next) }] } }]
+      })
+    };
+  };
+
+  try {
+    const result = await mega.generateMegaResponse({
+      selectedModel: 'mega-lite',
+      message: 'Haz un juego de que por cada paso que doy gane 1 coin.',
+      history: [],
+      buildMode: 'standard',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+
+    assert.equal(requests.length, 4, 'Director should coordinate three required specialists');
+    assert.deepEqual(
+      result.agentTrace.map(agent => agent.specialist),
+      ['mega-gameplay', 'mega-scripting', 'mega-ui']
+    );
+    assert.match(requests[0].contents.at(-1).parts[0].text, /INTELIGENCIA DE JUEGO/);
+    assert.match(requests[0].systemInstruction.parts[0].text, /MODO CREATE DETECTADO/);
+    assert.match(requests[3].systemInstruction.parts[0].text, /MODO CREATE DETECTADO/);
+    assert.equal(result.actions.length, 0);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
+    else process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL;
+    else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
   }
 });
