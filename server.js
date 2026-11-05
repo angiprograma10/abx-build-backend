@@ -2056,7 +2056,7 @@ async function createBuildBlueprint({ model, apiKey, message, history, signal, b
 async function reviewConstructionDraft({ provider, model, apiKey, message, draft, history, signal }) {
   // Este revisor solo implementa los protocolos Gemini/OpenAI; evita llamar por error a Gemini con otra clave.
   if (provider !== 'openai' && provider !== 'gemini') return draft;
-  const isBuildTask = /\\b(construye|construir|crea|crear|haz|hacer|diseña|diseñar|genera|generar|arma|armar|edifica|edificar|mueve|mover|acomoda|acomodar|coloca|colocar|posiciona|posicionar|reubica|reubicar|traslada|trasladar|alinea|alinear|gira|girar|rota|rotar|escala|escalar|eleva|elevar|baja|bajar|acerca|acercar|aleja|alejar|separa|separar|modifica|modificar|ajusta|ajustar|arregla|arreglar|corrige|corregir|build|create|make|design|generate|move|place|position|rotate|scale|align|edit|modify|house|tower|mapa|casa|edificio|torre|obby|interfaz|ui|juego|game|tienda|misión|mision|quest|monedas|coins|checkpoint|progreso|vfx|sonido|audio|partículas|particulas|spawn|portal|equipo|team|animación|animacion|efectos)\\b/i.test(message);
+  const isBuildTask = /\b(construye|construir|crea|crear|haz|hacer|diseña|diseñar|genera|generar|arma|armar|edifica|edificar|mueve|mover|acomoda|acomodar|coloca|colocar|posiciona|posicionar|reubica|reubicar|traslada|trasladar|alinea|alinear|gira|girar|rota|rotar|escala|escalar|eleva|elevar|baja|bajar|acerca|acercar|aleja|alejar|separa|separar|modifica|modificar|ajusta|ajustar|arregla|arreglar|corrige|corregir|build|create|make|design|generate|move|place|position|rotate|scale|align|edit|modify|house|tower|mapa|casa|edificio|torre|obby|interfaz|ui|juego|game|tienda|misión|mision|quest|monedas|coins|checkpoint|progreso|vfx|sonido|audio|partículas|particulas|spawn|portal|equipo|team|animación|animacion|efectos)\b/i.test(message);
   const actions = Array.isArray(draft?.actions) ? draft.actions : (draft?.action ? [draft.action] : []);
   const diagnosticOnly = action => action && (
     action.type.startsWith('INSPECT_') || action.type.startsWith('REPORT_') ||
@@ -2077,10 +2077,10 @@ async function reviewConstructionDraft({ provider, model, apiKey, message, draft
   const weakGeometry = hasLegacyGeometry && geometryReport.some(report =>
     (report.issues && report.issues.length) || (report.partCount && report.partCount < 12)
   );
-  const reviewMessage = 'PETICIÓN ORIGINAL DEL USUARIO:\\n' + message +
-    '\\n\\nDIAGNÓSTICO GEOMÉTRICO CALCULADO A PARTIR DE LAS COORDENADAS REALES (las intersecciones pueden ser uniones intencionales):\\n' + JSON.stringify(geometryReport) +
-    (hasLegacyGeometry ? (weakGeometry ? '\\n\\nEL BORRADOR NO TIENE CALIDAD PROFESIONAL. Revisa la geometría y sus dimensiones; no devuelvas una fila genérica de bloques.' : '') : '\\n\\nNo se generó informe geométrico legacy para este lote. Revisa contratos, dependencias, seguridad, rutas, límites y continuidad del proyecto.') +
-    '\\n\\nBORRADOR QUE DEBES AUDITAR Y CORREGIR:\\n' + JSON.stringify(draft);
+  const reviewMessage = 'PETICIÓN ORIGINAL DEL USUARIO:\n' + message +
+    '\n\nDIAGNÓSTICO GEOMÉTRICO CALCULADO A PARTIR DE LAS COORDENADAS REALES (las intersecciones pueden ser uniones intencionales):\n' + JSON.stringify(geometryReport) +
+    (hasLegacyGeometry ? (weakGeometry ? '\n\nEL BORRADOR NO TIENE CALIDAD PROFESIONAL. Revisa la geometría y sus dimensiones; no devuelvas una fila genérica de bloques.' : '') : '\n\nNo se generó informe geométrico legacy para este lote. Revisa contratos, dependencias, seguridad, rutas, límites y continuidad del proyecto.') +
+    '\n\nBORRADOR QUE DEBES AUDITAR Y CORREGIR:\n' + JSON.stringify(draft);
   try {
     let response;
     let payload;
