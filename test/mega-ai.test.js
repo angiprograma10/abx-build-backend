@@ -248,7 +248,7 @@ test('passes confirmed Roblox plugin project memory into a targeted repair reque
     });
     assert.ok(captured);
     assert.match(captured.contents.at(-1).parts[0].text, /SCRIPT CONFIRMADO/);
-    assert.match(captured.contents.at(-1).parts[0].text, /ServerScriptService\\.CoinCounter/);
+    assert.match(captured.contents.at(-1).parts[0].text, /ServerScriptService\.CoinCounter/);
     assert.match(captured.systemInstruction.parts[0].text, /MODO REPAIR DETECTADO/);
   } finally {
     global.fetch = oldFetch;
