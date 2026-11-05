@@ -186,6 +186,24 @@ test('includes strict scope fidelity and intentional color rules in director and
     assert.equal(mega.classifyChangeMode('Arregla el error del contador.'), 'REPAIR');
     assert.equal(mega.classifyChangeMode('Añade una tienda al juego.'), 'EDIT');
     assert.equal(mega.classifyChangeMode('Crea un juego de monedas.'), 'CREATE');
+
+    assert.deepEqual(
+      mega.guardIncrementalActions(
+        [{type:'DELETE_INSTANCE',path:'Workspace.OldHud'},{type:'SET_PROPERTIES',path:'Workspace.Hud',properties:{Visible:true}}],
+        'REPAIR',
+        'Arregla el contador que no se actualiza.'
+      ),
+      [{type:'SET_PROPERTIES',path:'Workspace.Hud',properties:{Visible:true}}]
+    );
+    assert.equal(
+      mega.guardIncrementalActions(
+        [{type:'DELETE_INSTANCE',path:'Workspace.OldHud'}],
+        'EDIT',
+        'Elimina el HUD antiguo.'
+      ).length,
+      1
+    );
+
   } finally {
     global.fetch = oldFetch;
     if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
