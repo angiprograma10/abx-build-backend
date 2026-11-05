@@ -102,10 +102,10 @@ const MEGA_TIERS = Object.freeze({
     priceLabel: 'GRATIS',
     requiresPaidPlan: false,
     note: 'Tareas rápidas: scripts, correcciones, ajustes y construcciones concretas.',
-    maxTasks: 4,
-    maxActions: 16,
-    directorTokens: 2400,
-    specialistTokens: 4800,
+    maxTasks: 2,
+    maxActions: 10,
+    directorTokens: 1900,
+    specialistTokens: 4300,
     qaPasses: 0,
     qaTokens: 0,
     instruction: 'Prioriza velocidad y claridad. Utiliza hasta dos especialistas, eligiendo los más relevantes. Resuelve por completo el alcance pequeño solicitado; no añadas sistemas o decoración que no aporten.'
@@ -117,10 +117,10 @@ const MEGA_TIERS = Object.freeze({
     priceLabel: 'GRATIS',
     requiresPaidPlan: false,
     note: 'Trabajos medianos: sistemas, interfaces y construcciones más detalladas.',
-    maxTasks: 4,
-    maxActions: 22,
-    directorTokens: 2900,
-    specialistTokens: 6500,
+    maxTasks: 3,
+    maxActions: 18,
+    directorTokens: 2500,
+    specialistTokens: 6000,
     qaPasses: 1,
     qaTokens: 4200,
     instruction: 'Planifica trabajos medianos. Coordina hasta tres especialistas según dependencias. Incluye una revisión final de coherencia de acciones, rutas, geometría y comportamiento.'
@@ -902,19 +902,21 @@ async function generateMegaResponse({
   const normalizedHistory = normalizeHistory(history);
   const changeMode = classifyChangeMode(message);
   const tier = getMegaTier(selectedModel);
+  const newGameCreation = isNewGameCreationRequest(message);
   const fastSpecialist = tier && buildMode !== 'full-game'
     ? inferFastSpecialist(message)
     : '';
   const isDirector = selectedModel === 'mega-director' ||
     buildMode === 'full-game' ||
     (Boolean(tier) && !fastSpecialist);
-  const actionLimit = tier ? Math.min(maxActions, tier.maxActions) : maxActions;
-  const taskLimit = tier ? tier.maxTasks : 5;
+  const actionLimit = tier ? Math.min(maxActions, Math.max(tier.maxActions, newGameCreation ? 16 : tier.maxActions)) : maxActions;
+  const taskLimit = tier ? Math.max(tier.maxTasks, newGameCreation ? 4 : tier.maxTasks) : 5;
   const tierSystemInstruction = (tier
     ? systemInstruction + '\n\nPERFIL DE BOT ' + tier.name.toUpperCase() + ':\n' +
       tier.instruction + '\nLímite de especialistas coordinados: ' + taskLimit +
       '. Límite de acciones del plan: ' + actionLimit +
-      '. Prioriza una entrega completa y concreta, con explicaciones breves. Todas las especialidades MEGA están disponibles internamente; selecciona solo las que realmente aporten. Exige criterios de aceptación verificables, conserva un contrato compartido de nombres y rutas, y revisa la coherencia antes de devolver el resultado.'
+      '. Prioriza una entrega completa y concreta, con explicaciones breves. Todas las especialidades MEGA están disponibles internamente; selecciona solo las que realmente aporten. Exige criterios de aceptación verificables, conserva un contrato compartido de nombres y rutas, y revisa la coherencia antes de devolver el resultado.' +
+      (newGameCreation ? '\\nEn esta creación de juego puedes coordinar hasta cuatro especialistas y 16 acciones para entregar el ciclo funcional con su HUD; no lo reduzcas a un único script.' : '')
     : systemInstruction) + '\n\n' + MEGA_CHANGE_MODE_RULES + '\n\n' + changeModeDirective(changeMode);
 
   let tasks;
