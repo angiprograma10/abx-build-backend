@@ -1106,7 +1106,9 @@ async function generateMegaResponse({
   // spatial defect triggers one targeted repair instead of shipping a bad model.
   const configuredQaPasses = fastSpecialist
     ? 0
-    : (tier ? Math.min(2, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
+    : newGameCreation
+      ? 1
+      : (tier ? Math.min(2, tier.qaPasses) : (isDirector && combinedActions.length ? 1 : 0));
   const geometryRepairPasses = geometryDefects ? 2 : 0;
   const qaPasses = Math.max(configuredQaPasses, geometryRepairPasses);
   for (let pass = 0; pass < qaPasses && (finalParsed.actions.length || geometryDefects); pass++) {
@@ -1125,7 +1127,7 @@ async function generateMegaResponse({
         '\n\nBORRADOR ACTUAL DE ACCIONES:\n' + JSON.stringify(finalParsed),
         []),
       signal,
-      maxTokens: tier ? tier.qaTokens : 4800,
+      maxTokens: tier ? Math.max(tier.qaTokens, newGameCreation ? 3500 : 0) : 4800,
       temperature: 0.08,
       tierId: tier ? tier.id : 'default'
     });
