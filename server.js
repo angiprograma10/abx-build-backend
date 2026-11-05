@@ -829,7 +829,7 @@ function validateAction(raw) {
         'TextColor3','BackgroundColor3','ImageColor3','AnchorPoint','CanvasSize',
         'ScrollBarThickness','FillDirection','HorizontalAlignment','VerticalAlignment',
         'CellSize','CellPadding','CornerRadius','Thickness','RichText','Font',
-        'MaxVisibleGraphemes'
+        'MaxVisibleGraphemes','SoundId','Looped','RollOffMaxDistance','RollOffMinDistance'
       ]);
       const enumProperties = {
         Material:'Material', Shape:'PartType', Font:'Font', AutomaticSize:'AutomaticSize',
