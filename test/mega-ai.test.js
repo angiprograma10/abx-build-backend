@@ -215,6 +215,52 @@ test('includes strict scope fidelity and intentional color rules in director and
   }
 });
 
+test('passes confirmed Roblox plugin project memory into a targeted repair request', async () => {
+  const oldUrl = process.env.MEGA_INFERENCE_URL;
+  const oldKey = process.env.GEMINI_API_KEY;
+  const oldModel = process.env.MEGA_BOOTSTRAP_MODEL;
+  const oldFetch = global.fetch;
+  delete process.env.MEGA_INFERENCE_URL;
+  process.env.GEMINI_API_KEY = 'temporary-test-key';
+  process.env.MEGA_BOOTSTRAP_MODEL = 'test-model';
+
+  let captured = null;
+  global.fetch = async (_url, options) => {
+    captured = JSON.parse(options.body);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ reply: 'Corregí el script.', actions: [] }) }] } }]
+      })
+    };
+  };
+
+  try {
+    await mega.generateMegaResponse({
+      selectedModel: 'mega-lite',
+      message: 'Arregla el script del contador de coins.',
+      history: [],
+      buildMode: 'standard',
+      projectContext: 'SCRIPT CONFIRMADO: ServerScriptService.CoinCounter. SOURCE: local coins = 0',
+      systemInstruction: 'Test',
+      signal: undefined
+    });
+    assert.ok(captured);
+    assert.match(captured.contents.at(-1).parts[0].text, /SCRIPT CONFIRMADO/);
+    assert.match(captured.contents.at(-1).parts[0].text, /ServerScriptService\\.CoinCounter/);
+    assert.match(captured.systemInstruction.parts[0].text, /MODO REPAIR DETECTADO/);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldUrl === undefined) delete process.env.MEGA_INFERENCE_URL;
+    else process.env.MEGA_INFERENCE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldKey;
+    if (oldModel === undefined) delete process.env.MEGA_BOOTSTRAP_MODEL;
+    else process.env.MEGA_BOOTSTRAP_MODEL = oldModel;
+  }
+});
+
 test('retries temporary 503 overloads and automatically switches to a fallback Gemini model', async () => {
   const env = {
     url: process.env.MEGA_INFERENCE_URL,
