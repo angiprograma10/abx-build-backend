@@ -238,6 +238,16 @@ function changeModeDirective(mode) {
   return 'MODO ANALYZE DETECTADO: responde o inspecciona el problema sin generar cambios que el usuario no haya pedido.';
 }
 
+function guardIncrementalActions(actions, mode, message) {
+  if (!Array.isArray(actions)) return [];
+  if (mode !== 'EDIT' && mode !== 'REPAIR') return actions;
+  const explicitlyRemovesSomething = /\b(elimina|eliminar|quita|quitar|borra|borrar|delete|remove|reconstruye|reconstruir|rehaz|rehacer|desde cero|reemplaza todo|borra todo)\b/i.test(String(message || ''));
+  if (explicitlyRemovesSomething) return actions;
+  // A correction/addition must not silently delete existing project instances.
+  return actions.filter(action => !action || action.type !== 'DELETE_INSTANCE');
+}
+
+
 
 
 function isMegaModel(model) {
@@ -916,7 +926,7 @@ async function generateMegaResponse({
       tier.instruction + '\nLímite de especialistas coordinados: ' + taskLimit +
       '. Límite de acciones del plan: ' + actionLimit +
       '. Prioriza una entrega completa y concreta, con explicaciones breves. Todas las especialidades MEGA están disponibles internamente; selecciona solo las que realmente aporten. Exige criterios de aceptación verificables, conserva un contrato compartido de nombres y rutas, y revisa la coherencia antes de devolver el resultado.' +
-      (newGameCreation ? '\\nEn esta creación de juego puedes coordinar hasta cuatro especialistas y 16 acciones para entregar el ciclo funcional con su HUD; no lo reduzcas a un único script.' : '')
+      (newGameCreation ? '\nEn esta creación de juego puedes coordinar hasta cuatro especialistas y 16 acciones para entregar el ciclo funcional con su HUD; no lo reduzcas a un único script.' : '')
     : systemInstruction) + '\n\n' + MEGA_CHANGE_MODE_RULES + '\n\n' + changeModeDirective(changeMode);
 
   let tasks;
@@ -1151,7 +1161,7 @@ async function generateMegaResponse({
 
   return {
     reply: finalParsed.reply || reply || 'MEGA terminó el plan de especialistas.',
-    actions: finalParsed.actions,
+    actions: guardIncrementalActions(finalParsed.actions, changeMode, message),
     modelUsed: tier
       ? tier.name
       : isDirector
@@ -1176,6 +1186,7 @@ module.exports = {
   inferFastSpecialist,
   isNewGameCreationRequest,
   classifyChangeMode,
+  guardIncrementalActions,
   analyzeActionGeometry,
   generateMegaResponse
 };
