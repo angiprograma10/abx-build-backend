@@ -905,6 +905,7 @@ async function generateMegaResponse({
   message,
   history,
   buildMode,
+  projectContext = '',
   systemInstruction,
   signal,
   maxActions = 30
@@ -944,6 +945,7 @@ async function generateMegaResponse({
         role: 'user',
         content: 'Analiza esta solicitud como director técnico de un equipo Roblox. ' +
           'No generes acciones todavía. Devuelve SOLO JSON con {"reply":"...","projectBrief":"...","tasks":[{"specialist":"mega-build","task":"objetivo, entregables y criterios de aceptación","dependsOn":[]}]}.' +
+          (projectContext ? '\n\n' + projectContext : '') +
           '\n\nPETICIÓN:\n' + message +
           '\n\nMODO:\n' + (buildMode === 'full-game'
             ? 'Juego completo: reúne las especialidades necesarias para un MVP coherente.'
@@ -1019,6 +1021,7 @@ async function generateMegaResponse({
         actions: result.actions
       }));
       const context = [
+        projectContext,
         projectBrief ? 'RESUMEN DEL DIRECTOR:\n' + projectBrief : '',
         'TAREA ASIGNADA A ' + task.specialist.toUpperCase() + ':\n' + task.task,
         task.dependsOn.length ? 'DEPENDENCIAS DECLARADAS: ' + task.dependsOn.join(', ') : '',
@@ -1086,6 +1089,7 @@ async function generateMegaResponse({
     }
   }
   const reviewContext = [
+    projectContext,
     projectBrief ? 'RESUMEN DEL PROYECTO:\n' + projectBrief : '',
     'ENTREGAS DE ESPECIALISTAS:\n' + JSON.stringify(results).slice(0, 22000),
     'Petición original: ' + message
