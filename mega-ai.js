@@ -1163,7 +1163,9 @@ async function generateMegaResponse({
           dependsOn: Array.isArray(task && task.dependsOn) ? task.dependsOn.filter(id => typeof id === 'string').slice(0, 5) : []
         })).filter(task => allowed.has(task.specialist) && task.task)
       : [];
-    // Una lista tasks vacía explícita es una respuesta conversacional válida.\n    // Solo usamos fallback si el modelo no entregó una lista de tareas reconocible.\n    if (!Array.isArray(plan.tasks)) tasks = fallbackSpecialists(message).slice(0, taskLimit);
+    // Una lista tasks vacía explícita es una respuesta conversacional válida.
+    // Solo usamos fallback si el modelo no entregó una lista de tareas reconocible.
+    if (!Array.isArray(plan.tasks)) tasks = fallbackSpecialists(message).slice(0, taskLimit);
   } else if (Object.prototype.hasOwnProperty.call(MEGA_ROLES, selectedModel)) {
     tasks = [{ specialist: selectedModel, task: message, dependsOn: [] }];
   } else {
