@@ -2669,16 +2669,31 @@ app.post('/chat', rateLimit(CONFIG.maxChatRequestsPerMinute), async (req, res) =
     }
 
     const actions = [];
-    for (const proposed of proposedActions) {
+    for (let actionIndex = 0; actionIndex < proposedActions.length; actionIndex++) {
+      const proposed = proposedActions[actionIndex];
       const validated = validateAction(proposed);
       if (!validated) {
-        console.warn('Acción del plan rechazada:',
-          cleanText(proposed?.type, 60));
+        const rejectedType = cleanText(proposed?.type, 60) || 'TIPO_DESCONOCIDO';
+        const providedFields = isObject(proposed)
+          ? Object.keys(proposed).filter(key => key !== 'source').slice(0, 24)
+          : [];
+        console.warn('[ACTION_VALIDATION] rejected', JSON.stringify({
+          actionIndex,
+          type: rejectedType,
+          fields: providedFields
+        }));
         session.pendingPlan = null;
-        return res.json({
-          ok: true,
-          reply: 'Una acción del plan no superó las validaciones. No se ejecutará ninguna parte del plan. Intenta reducir el alcance o dividirlo en etapas.',
-          action: null
+        return res.status(422).json({
+          ok: false,
+          code: 'ACTION_VALIDATION_FAILED',
+          rejectedAction: {
+            index: actionIndex,
+            type: rejectedType,
+            fields: providedFields
+          },
+          error: 'MEGA generó una acción que el backend no aceptó (' +
+            rejectedType + ', acción ' + (actionIndex + 1) +
+            '). No se ejecutó ninguna parte del plan. El servidor registró los campos recibidos para corregir el contrato.'
         });
       }
       actions.push(validated);
