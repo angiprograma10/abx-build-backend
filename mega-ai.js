@@ -430,8 +430,12 @@ function getRoleModel(modelId) {
   return process.env[role.env] || getMegaBaseModel();
 }
 
+function isExternalFallbackAllowed() {
+  return String(process.env.MEGA_ALLOW_EXTERNAL_FALLBACK || '').toLowerCase() === 'true';
+}
+
 function getMegaCatalog() {
-  const configured = Boolean(getMegaEndpoint() || process.env.GEMINI_API_KEY);
+  const configured = Boolean(getMegaEndpoint() || (isExternalFallbackAllowed() && process.env.GEMINI_API_KEY));
   return Object.values(MEGA_TIERS).map(tier => ({
     id: tier.id,
     provider: 'mega',
@@ -447,7 +451,7 @@ function getMegaCatalog() {
 
 function getMegaStatus() {
   const endpointConfigured = Boolean(getMegaEndpoint());
-  const bootstrapConfigured = !endpointConfigured && Boolean(process.env.GEMINI_API_KEY);
+  const bootstrapConfigured = !endpointConfigured && isExternalFallbackAllowed() && Boolean(process.env.GEMINI_API_KEY);
   return {
     configured: endpointConfigured || bootstrapConfigured,
     endpointConfigured,
@@ -757,6 +761,12 @@ async function callMegaModel({ roleId, messages, signal, maxTokens = 6500, tempe
   // Temporary runtime with controlled retries and model failover.
   // Specialist prompts remain MEGA-owned; only the inference engine is switched.
   if (!endpoint) {
+    if (!isExternalFallbackAllowed()) {
+      const error = new Error('MEGA necesita su servidor propio de inferencia. Configura MEGA_INFERENCE_URL; el uso de proveedores externos está desactivado.');
+      error.code = 'MEGA_SELF_HOSTED_REQUIRED';
+      error.httpStatus = 503;
+      throw error;
+    }
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       const error = new Error('El servicio de MEGA todavía no está disponible.');
