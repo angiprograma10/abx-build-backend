@@ -1,56 +1,57 @@
 # MEGA AI — servidor propio de inferencia
 
-Este servicio carga un modelo abierto en hardware GPU administrado por el proyecto. Render sigue funcionando como backend web/orquestador; no debe intentar cargar los pesos del modelo.
+MEGA utiliza **OpenAI gpt-oss-20b**, un modelo de pesos abiertos que se ejecuta en infraestructura administrada por el proyecto. Los pesos no se sirven desde ChatGPT ni desde la API de OpenAI: el servidor de inferencia lo controla MEGA.
 
-## Modelo base de prototipo
+## Modelo base
 
-- Repositorio: `Qwen/Qwen3.5-4B`
-- Licencia publicada en el repositorio: Apache-2.0
-- Pesos publicados: aproximadamente 9.34 GB en formato Safetensors.
-- El modelo card oficial documenta ejecución con vLLM y SGLang.
-- En esta primera etapa se ejecuta un modelo base compartido. Los roles MEGA ya tienen prompts separados, pero **todavía no son adaptadores entrenados**.
+- Identificador: `openai/gpt-oss-20b`
+- Licencia: Apache 2.0, sujeta a la política de uso de gpt-oss.
+- Tamaño: 21B parámetros totales y 3.6B activos por token.
+- Formato publicado: MXFP4.
+- Memoria de GPU de referencia: alrededor de 16 GB para inferencia con MXFP4; el consumo real depende del contexto, caché, runtime y concurrencia.
+- Contexto máximo anunciado: 131,072 tokens; MEGA comienza con 8,192 para controlar memoria y latencia.
 
-Fuente oficial: https://huggingface.co/Qwen/Qwen3.5-4B
+Fuentes oficiales:
+- https://developers.openai.com/api/docs/models/gpt-oss-20b
+- https://github.com/openai/gpt-oss
+- https://developers.openai.com/cookbook/articles/gpt-oss/run-vllm
+
+## Arquitectura MEGA
+
+Render permanece como backend web y orquestador. No carga los pesos del modelo. El servidor vLLM ejecuta `openai/gpt-oss-20b` y expone una API compatible con OpenAI en `/v1/chat/completions`.
+
+Los roles MEGA (DIRECTOR, CHAT, BUILD, SCRIPTING, UI, VFX, GAMEPLAY y QA) usan instrucciones especializadas sobre el modelo base. **Los roles todavía no son modelos independientes entrenados**: cada uno necesita un conjunto de datos propio, entrenamiento LoRA compatible, evaluación y despliegue de sus adaptadores.
 
 ## Modo propio obligatorio
 
-El backend exige inferencia alojada por MEGA de forma predeterminada. Si `MEGA_INFERENCE_URL` no está configurada, devuelve un estado de servicio no disponible en vez de recurrir silenciosamente a Gemini u otro proveedor externo.
-
-Solo para pruebas temporales y con decisión explícita se puede habilitar `MEGA_ALLOW_EXTERNAL_FALLBACK=true` junto con `GEMINI_API_KEY`. No actives esa variable si el requisito es cero dependencia externa.
+El backend exige inferencia alojada por MEGA de forma predeterminada. Si `MEGA_INFERENCE_URL` no está configurada, no recurre silenciosamente a otro proveedor.
 
 ## Requisitos previos
 
-1. Un equipo/servidor Linux con GPU NVIDIA compatible con la versión de CUDA/PyTorch de vLLM.
-2. Espacio libre suficiente para descargar los pesos y guardar caché.
-3. Acceso a red para descargar el modelo la primera vez.
-4. Un secreto largo para proteger el endpoint de inferencia.
+1. Un host Linux con GPU compatible con la versión de vLLM y CUDA instalada.
+2. Como referencia inicial, una GPU con al menos 16 GB de memoria para el modelo cuantizado; deja margen adicional para caché, contexto y solicitudes simultáneas.
+3. Espacio libre para descargar y almacenar los pesos.
+4. Un secreto largo para proteger el endpoint.
 5. Una URL HTTPS privada o protegida a la que pueda llegar el backend de Render.
 
-No se fija una cantidad mínima de VRAM como garantía: el consumo depende de la GPU, precisión, longitud de contexto, caché KV y versión de vLLM. Empieza con contexto reducido y mide memoria antes de aceptar tráfico.
+La receta actual de vLLM para gpt-oss-20b documenta vLLM 0.10.1 o posterior y varios tipos de GPU compatibles. Verifica la matriz vigente antes de elegir hardware o una imagen de contenedor:
+https://recipes.vllm.ai/openai/gpt-oss-20b
 
 ## Instalar y ejecutar
 
-La tarjeta oficial del modelo documenta el uso de vLLM. Instala una versión de vLLM que incluya soporte Qwen3.5 según sus instrucciones actuales:
+Sigue la instalación oficial de vLLM para el sistema operativo, GPU y versión de CUDA del host:
+https://docs.vllm.ai/en/stable/getting_started/installation/
+
+Después ejecuta:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install vllm
-```
-
-En algunos entornos puede ser necesario seguir la guía de instalación CUDA de vLLM en vez de la instalación genérica. Consulta https://docs.vllm.ai/en/stable/getting_started/installation/
-
-Configura las variables y ejecuta:
-
-```bash
-export MEGA_BASE_MODEL="Qwen/Qwen3.5-4B"
+export MEGA_BASE_MODEL="openai/gpt-oss-20b"
 export MEGA_INFERENCE_API_KEY="CAMBIA_ESTO_POR_UN_SECRETO_LARGO"
 export MEGA_MAX_MODEL_LEN="8192"
 bash inference/serve.sh
 ```
 
-El lanzador utiliza `--language-model-only`: MEGA trabaja con instrucciones de texto para Roblox Studio y no necesita cargar los módulos de imagen/video del modelo base. Esto reduce memoria frente a cargar el modo multimodal completo. El servidor expone una API compatible con OpenAI en `/v1/chat/completions`, con el modelo servido como `mega-base`.
+El primer inicio descarga los pesos. El servidor registra el modelo como `mega-base` y expone `/v1/chat/completions`.
 
 Prueba local:
 
@@ -67,25 +68,25 @@ En las variables privadas del servicio backend de Render:
 - `MEGA_INFERENCE_API_KEY=el-mismo-secreto-configurado-en-vLLM`
 - `MEGA_BASE_MODEL=mega-base`
 
-El backend transforma `/v1` en `/v1/chat/completions`. No uses una URL localhost en Render: localhost apuntaría al contenedor de Render, no a tu equipo.
+El backend transforma `/v1` en `/v1/chat/completions`. No uses una URL localhost en Render: localhost apuntaría al contenedor de Render, no al host de inferencia.
 
-Protege el servidor con HTTPS, firewall o red privada. La autenticación de vLLM por API key no protege todos sus endpoints; la documentación oficial advierte que algunas rutas, como `/invocations`, requieren protección adicional en la red/reverse proxy. No expongas el puerto GPU directamente a Internet sin esa protección.
+Protege el servidor con HTTPS, firewall o red privada. No expongas el puerto de inferencia directamente a Internet sin una capa de protección.
 
 ## Adaptadores especializados posteriores
 
-Cuando exista y se haya evaluado un adaptador LoRA, colócalo en una de estas carpetas:
+Cuando exista y se haya evaluado un adaptador LoRA compatible con esta base, colócalo en una de estas carpetas:
 
+- `models/mega-director`
+- `models/mega-chat`
 - `models/mega-build`
 - `models/mega-scripting`
 - `models/mega-ui`
 - `models/mega-fx`
-- `models/mega-gameplay
-- `models/mega-chat``
+- `models/mega-gameplay`
+- `models/mega-qa`
 
-`serve.sh` los registra si sus carpetas contienen un adaptador PEFT válido. Después cambia en Render el modelo del rol correspondiente, por ejemplo `MEGA_BUILD_MODEL=mega-build`. Mientras no exista un adaptador entrenado, el backend usa `mega-base` y aplica instrucciones específicas por especialista.
-
-No marques un especialista como entrenado hasta que tenga pesos LoRA propios y supere su conjunto de evaluación.
+`serve.sh` los registra si sus carpetas contienen adaptadores válidos para la versión de vLLM y la arquitectura de gpt-oss. No cambies un rol a un adaptador hasta verificar su compatibilidad y pasar el benchmark de MEGA.
 
 ## Estado real
 
-Esta carpeta solo prepara el servidor. No instala una GPU, no despliega un host y no entrena pesos automáticamente. El despliegue depende de proporcionar hardware/hosting GPU y configurar el endpoint privado.
+El repositorio ahora selecciona gpt-oss-20b como modelo base predeterminado y prepara el comando de servicio. **Esto no significa que el modelo ya esté descargado, alojado, entrenado ni conectado a Render.** Todavía hace falta un host compatible, desplegar vLLM, probar la API y configurar la URL privada en Render.
