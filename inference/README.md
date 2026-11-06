@@ -12,11 +12,11 @@ Este servicio carga un modelo abierto en hardware GPU administrado por el proyec
 
 Fuente oficial: https://huggingface.co/Qwen/Qwen3.5-4B
 
-## Modo temporal mientras no hay GPU
+## Modo propio obligatorio
 
-Si `MEGA_INFERENCE_URL` todavía no está configurada pero `GEMINI_API_KEY` sí existe en Render, el backend puede ejecutar los prompts de cada especialista mediante ese motor temporal. La página sigue mostrando exclusivamente los cinco nombres MEGA y no expone el proveedor en el selector ni en la etiqueta de respuesta.
+El backend exige inferencia alojada por MEGA de forma predeterminada. Si `MEGA_INFERENCE_URL` no está configurada, devuelve un estado de servicio no disponible en vez de recurrir silenciosamente a Gemini u otro proveedor externo.
 
-Este modo permite probar la orquestación y los contratos de acciones sin servidor GPU. **No convierte el modelo base en pesos propios ni significa que los adaptadores LoRA estén entrenados.** Cuando se configure `MEGA_INFERENCE_URL`, la inferencia pasa al servidor propio y deja de usar el modo temporal.
+Solo para pruebas temporales y con decisión explícita se puede habilitar `MEGA_ALLOW_EXTERNAL_FALLBACK=true` junto con `GEMINI_API_KEY`. No actives esa variable si el requisito es cero dependencia externa.
 
 ## Requisitos previos
 
