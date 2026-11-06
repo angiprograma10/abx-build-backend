@@ -344,6 +344,7 @@ const COLORS = new Set([
 ]);
 
 const EXTENDED_ACTION_TYPES = new Set([
+  'CREATE_MODEL_BLUEPRINT',
   'CREATE_SPAWN_SET',
   'CREATE_HIGHLIGHT',
   'CREATE_CLICK_DETECTOR',
@@ -921,6 +922,27 @@ function validateExtendedAction(raw) {
   if (typeof encoded !== 'string' || encoded.length > 128 * 1024) return null;
   const cloned = sanitizeExtendedValue(raw);
   if (!isObject(cloned) || cloned.invalid === true) return null;
+
+  // Contrato compartido con el plugin MEGA: CREATE_MODEL_BLUEPRINT acepta
+  // "objects" (preferido) o "parts", con 1-250 piezas BasePart.
+  if (raw.type === 'CREATE_MODEL_BLUEPRINT') {
+    const sourceEntries = Array.isArray(cloned.objects) ? cloned.objects : cloned.parts;
+    if (!Array.isArray(sourceEntries) || sourceEntries.length < 1 || sourceEntries.length > 250) return null;
+    const supportedShapes = new Set(['Block', 'Ball', 'Cylinder', 'Wedge', 'CornerWedge', 'Truss']);
+    const entries = sourceEntries.map((entry) => {
+      const part = validatePart(entry);
+      if (!part || !supportedShapes.has(part.shape)) return null;
+      return part;
+    });
+    if (entries.some(entry => !entry)) return null;
+    if (cloned.parent !== undefined &&
+        (typeof cloned.parent !== 'string' || !validPath(cloned.parent))) return null;
+    if (cloned.primaryPart !== undefined &&
+        (typeof cloned.primaryPart !== 'string' || !cleanText(cloned.primaryPart, 60))) return null;
+    if (cloned.pivot !== undefined &&
+        !vector3(cloned.pivot, null, -10000, 10000)) return null;
+    cloned[Array.isArray(cloned.objects) ? 'objects' : 'parts'] = entries;
+  }
 
   const required = EXTENDED_REQUIRED_FIELDS[raw.type] || [];
   for (const key of required) {
