@@ -1,6 +1,6 @@
 # MEGA AI — datos y entrenamiento de especialistas
 
-Cada especialidad tendrá su propio conjunto de datos y su propio adaptador LoRA:
+Cada especialidad tendrá su propio conjunto de datos y su propio adaptador LoRA. MEGA CHAT se entrena con conversaciones generales útiles, explicaciones, escritura, aprendizaje y diálogo natural; no debe responder a todo como si fuera una orden de construcción:
 
 - `mega-build`
 - `mega-scripting`
