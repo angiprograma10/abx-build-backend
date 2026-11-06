@@ -33,6 +33,7 @@ add_lora() {
 }
 
 add_lora "mega-director" "MEGA_DIRECTOR_ADAPTER_DIR"
+add_lora "mega-chat" "MEGA_CHAT_ADAPTER_DIR"
 add_lora "mega-build" "MEGA_BUILD_ADAPTER_DIR"
 add_lora "mega-scripting" "MEGA_SCRIPTING_ADAPTER_DIR"
 add_lora "mega-ui" "MEGA_UI_ADAPTER_DIR"
@@ -41,7 +42,7 @@ add_lora "mega-gameplay" "MEGA_GAMEPLAY_ADAPTER_DIR"
 add_lora "mega-qa" "MEGA_QA_ADAPTER_DIR"
 
 if (( ${#LORA_MODULES[@]} > 0 )); then
-  ARGS+=(--enable-lora --max-loras 7 --max-lora-rank "${MEGA_MAX_LORA_RANK:-64}")
+  ARGS+=(--enable-lora --max-loras 8 --max-lora-rank "${MEGA_MAX_LORA_RANK:-64}")
   ARGS+=(--lora-modules "${LORA_MODULES[@]}")
 fi
 
