@@ -28,8 +28,10 @@ const MEGA_ROLES = Object.freeze({
       'Calcula posiciones XYZ, tamaños XYZ y rotaciones. Comprueba contactos, grosor de muros, huecos de puertas y ventanas, alturas transitables, separaciones y colisiones conceptuales. Evita filas planas, piezas flotantes, volúmenes duplicados e intersecciones accidentales.',
       'Entrega acabado visual deliberado: asigna a cada pieza un color explícito de una paleta coherente de 2 a 4 colores; usa materiales apropiados (por ejemplo, Concrete para cimientos, Wood para madera, Metal para soportes, Glass para ventanas y SmoothPlastic para superficies limpias), siempre que estén admitidos. Separa visualmente estructura, detalles y acentos sin convertir todo en Neon.',
       'Para modelos completos prefiere CREATE_MODEL_BLUEPRINT: {"type":"CREATE_MODEL_BLUEPRINT","name":"...","parent":"Workspace","objects":[{"name":"...","shape":"Block|Ball|Cylinder|Wedge|CornerWedge|Truss","size":[x,y,z],"position":[x,y,z],"rotation":[x,y,z],"color":"BrickColor name","material":"Enum.Material name","anchored":true,"canCollide":true}],"primaryPart":"..."}. Este constructor admite hasta 250 piezas en un solo Model; CREATE_STRUCTURE admite hasta 60. No desperdicies ese presupuesto: cada pieza debe formar parte de un diseño reconocible.',
-      'CASA: No es una caja ni tres filas. Diseña una vivienda completa y con profundidad: plataforma/suelo, perímetro de cuatro lados en varios segmentos dejando hueco real para la entrada, fachada principal y trasera, paredes laterales, puerta en el hueco, dos o más ventanas con marcos y cristales, techo elevado con faldones o dos planos inclinados, aleros, escalones/porche y detalles de fachada. Las paredes deben rodear un espacio interior; la puerta no debe quedar tapada; el techo debe cubrir la huella. Usa coordenadas X/Y/Z coherentes y piezas en más de un plano.',
-      'Antes de entregar una casa, revisa que el plano superior muestre un perímetro y no una fila, que la elevación muestre paredes y techo a distintas alturas, y que la fachada tenga aberturas reales. Usa normalmente 18–35 piezas bien colocadas para una casa sencilla detallada; más piezas solo si aportan arquitectura.',
+      'CASA — ESTÁNDAR ARQUITECTÓNICO ALTO: no entregues una caja, pedestal, fachada plana ni maqueta de bloques apilados. Diseña una vivienda reconocible y habitable desde frente, laterales, parte trasera y vista superior. Usa una huella rectangular o en L con profundidad real; cimentación escalonada; suelo y paredes perimetrales que definan interior; paredes divididas en segmentos para dejar huecos auténticos; puerta principal completa dentro del hueco; al menos 4 ventanas distribuidas en fachadas, cada una con marco exterior, montantes y cristal; techo elevado que cubra la huella con dos faldones inclinados o varias piezas Wedge, cumbrera y aleros; porche con suelo, escalones y columnas; zócalo, esquinas, dinteles, molduras, marcos de puerta, vigas y detalles de fachada. Añade interior mínimo visible desde la entrada, sin amueblar de forma aleatoria.',
+      'CASA — PLANIFICACIÓN ESPACIAL: define ancho X, fondo Z y altura Y antes de colocar piezas. Mantén alineación; paredes opuestas deben cerrar el volumen y tener grosores coherentes; ventanas y puerta deben interrumpir la pared y no quedar tapadas; el tejado debe estar sobre las paredes y sobresalir ligeramente; porche conectado a la entrada; escalones tocando el suelo. Evita piezas flotantes, paredes duplicadas, ventanas pintadas sobre pared sólida y techos que no cubren el edificio.',
+      'CASA — DISEÑO VISUAL: usa una paleta arquitectónica intencional de 3–5 colores admitidos, por ejemplo beige/cream para muros, brown para madera, dark gray para tejado, white para marcos y blue para cristales; adapta la paleta al estilo y no mezcles colores al azar. Diferencia materiales: Concrete o Brick en base/muros, Wood/WoodPlanks en puerta/porche, Slate en techo, Glass en ventanas, Metal en herrajes. Nombra cada pieza por su función: Wall_Front_Left, Window_01_Glass, Window_01_Frame, Door_Main, Roof_Left_Slope, Foundation_Front, Porch_Column_01.',
+      'CASA — PRESUPUESTO: para una casa sencilla pero detallada usa normalmente 45–80 piezas bien colocadas; una casa más compleja puede usar hasta 120 si cada pieza añade arquitectura real. No reduzcas el diseño a 18 piezas genéricas ni gastes piezas en adornos repetidos. Verifica perímetro cerrado, interior, puerta practicable, cuatro ventanas con marcos/cristales, techo inclinado continuo, porche conectado, variedad de materiales y colores.',
       'Cada estructura debe tener una composición específica. Aprovecha hasta 60 piezas por CREATE_STRUCTURE o hasta 250 por CREATE_MODEL_BLUEPRINT cuando el detalle lo justifique; nunca añadas duplicados para inflar el conteo.',
       'No escribas scripts salvo que estén expresamente dentro de tu tarea; delega la lógica a MEGA SCRIPTING.',
       'Devuelve únicamente JSON válido con {"reply":"...","actions":[...]}. Usa exclusivamente acciones admitidas por el plugin.'
@@ -994,17 +996,38 @@ function analyzeActionGeometry(actions, message) {
       spanX: Math.round(span('x') * 10) / 10,
       spanY: Math.round(span('y') * 10) / 10,
       spanZ: Math.round(span('z') * 10) / 10,
-      duplicateParts: duplicates
+      duplicateParts: duplicates,
+      distinctColors: new Set(parts.map(part => String(part && part.color || '').trim().toLowerCase()).filter(Boolean)).size,
+      distinctMaterials: new Set(parts.map(part => String(part && part.material || '').trim().toLowerCase()).filter(Boolean)).size,
+      distinctShapes: new Set(parts.map(part => String(part && part.shape || '').trim().toLowerCase()).filter(Boolean)).size
     };
     const issues = [];
     const houseIntent = /\b(casa|vivienda|mansión|mansion)\b/i.test(message);
-    if (parts.length < (houseIntent ? 14 : 8)) issues.push('Muy pocas piezas para la complejidad solicitada.');
+    const namedParts = parts.map(part => String(part && part.name || '').toLowerCase());
+    const roleCount = pattern => namedParts.filter(name => pattern.test(name)).length;
+    const houseRoles = houseIntent ? {
+      walls: roleCount(/wall|pared|muro|fachada/),
+      roof: roleCount(/roof|tejado|techo|fald[oó]n|cumbrera/),
+      windows: roleCount(/window|ventana|cristal/),
+      doors: roleCount(/door|puerta/),
+      foundation: roleCount(/foundation|cimiento|base|z[oó]calo/),
+      porch: roleCount(/porch|porche|column|columna|step|escal[oó]n/)
+    } : null;
+    if (parts.length < (houseIntent ? 35 : 8)) issues.push('Muy pocas piezas para la complejidad solicitada.');
     if (points.length < Math.min(parts.length, houseIntent ? 14 : 8)) issues.push('Muchas piezas no tienen coordenadas XYZ válidas.');
     if (metrics.distinctX < 3 || metrics.spanX < 6) issues.push('La composición casi no ocupa el eje X.');
     if (metrics.distinctZ < 3 || metrics.spanZ < 6) issues.push('La composición casi no ocupa el eje Z; puede ser una fila o fachada plana.');
     if (houseIntent && (metrics.distinctY < 3 || metrics.spanY < 5)) issues.push('La vivienda no muestra suficientes niveles de altura para suelo, paredes y techo.');
+    if (houseIntent && metrics.distinctColors < 3) issues.push('La vivienda no tiene una paleta arquitectónica de al menos tres colores.');
+    if (houseIntent && metrics.distinctMaterials < 3) issues.push('La vivienda no diferencia materiales arquitectónicos.');
+    if (houseIntent && houseRoles.walls < 4) issues.push('Faltan segmentos de pared identificados por función.');
+    if (houseIntent && houseRoles.roof < 2) issues.push('Falta un tejado compuesto por varios faldones o piezas.');
+    if (houseIntent && houseRoles.windows < 4) issues.push('Faltan cuatro componentes de ventana identificables.');
+    if (houseIntent && houseRoles.doors < 1) issues.push('Falta una puerta principal identificable.');
+    if (houseIntent && houseRoles.foundation < 1) issues.push('Falta una cimentación o base identificable.');
+    if (houseIntent && houseRoles.porch < 2) issues.push('Faltan elementos de porche, columnas o escalones.');
     if (duplicates > Math.max(1, Math.floor(parts.length * 0.15))) issues.push('Hay demasiadas piezas duplicadas en la misma posición y tamaño.');
-    return { ...metrics, issues };
+    return { ...metrics, houseRoles, issues };
   });
   if (!geometryActions.length) {
     return [{ model: 'Sin modelo 3D', partCount: 0, issues: ['La petición requiere una construcción 3D reconocible, pero no se generó CREATE_STRUCTURE ni CREATE_MODEL_BLUEPRINT.'] }];
@@ -1262,7 +1285,7 @@ async function generateMegaResponse({
     const passPrompt = 'AUDITORÍA FINAL INTEGRAL: comprueba dependencias, rutas, nombres, compatibilidad, fidelidad exacta a la petición, colores visuales y funcionalidad. Corrige solo defectos concretos. Elimina extras no solicitados. Devuelve las acciones completas, no una explicación.' +
       (currentGeometryDefects
         ? '\n\nDIAGNÓSTICO GEOMÉTRICO MEDIDO: ' + JSON.stringify(currentGeometryReport) +
-          '\nREPARACIÓN OBLIGATORIA: el borrador no se puede entregar así. Rediseña las acciones geométricas desde cero para corregir todos los defectos medidos. No conserves una fila, cuadrícula plana ni bloques repetidos. Para una casa crea una vivienda con perímetro cerrado, hueco real de entrada, ventanas, puerta, paredes en profundidad y techo por encima; usa CREATE_MODEL_BLUEPRINT con objetos XYZ completos. La geometría debe poder reconocerse sin leer los nombres.'
+          '\nREPARACIÓN OBLIGATORIA: el borrador no se puede entregar así. Rediseña las acciones geométricas desde cero. No conserves filas, cuadrículas planas, pedestales ni bloques repetidos. Para una casa aplica el estándar arquitectónico alto: perímetro cerrado, interior, puerta en hueco real, cuatro ventanas con marcos y cristales, tejado inclinado de varias piezas, cimentación, porche conectado, escalones y columnas; 45–80 piezas con nombres semánticos, paleta de al menos tres colores y tres materiales. Usa CREATE_MODEL_BLUEPRINT con objetos XYZ completos. La geometría debe reconocerse sin leer los nombres.'
         : '');
     const reviewed = await callMegaModel({
       roleId: 'qa',
