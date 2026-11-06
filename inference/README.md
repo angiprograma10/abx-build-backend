@@ -79,7 +79,8 @@ Cuando exista y se haya evaluado un adaptador LoRA, colócalo en una de estas ca
 - `models/mega-scripting`
 - `models/mega-ui`
 - `models/mega-fx`
-- `models/mega-gameplay`
+- `models/mega-gameplay
+- `models/mega-chat``
 
 `serve.sh` los registra si sus carpetas contienen un adaptador PEFT válido. Después cambia en Render el modelo del rol correspondiente, por ejemplo `MEGA_BUILD_MODEL=mega-build`. Mientras no exista un adaptador entrenado, el backend usa `mega-base` y aplica instrucciones específicas por especialista.
 
