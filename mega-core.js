@@ -32,7 +32,7 @@ function buildJumpRewardResponse(amount) {
     'local function bindCharacter(player, character)',
     '    local humanoid = character:WaitForChild("Humanoid", 10)',
     '    if not humanoid then return end',
-    '    local lastRewardAt = 0',
+    '    local lastRewardAt = -math.huge',
     '    local wasJumping = false',
     '    humanoid.StateChanged:Connect(function(_, newState)',
     '        if newState == Enum.HumanoidStateType.Jumping and not wasJumping then',
