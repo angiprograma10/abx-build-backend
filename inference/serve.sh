@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_MODEL="${MEGA_BASE_MODEL:-Qwen/Qwen3.5-4B}"
+# MEGA uses OpenAI's open-weight gpt-oss-20b as its shared base model.
+# The model weights run on infrastructure controlled by the MEGA project.
+BASE_MODEL="${MEGA_BASE_MODEL:-openai/gpt-oss-20b}"
 HOST="${MEGA_HOST:-0.0.0.0}"
 PORT="${MEGA_PORT:-8000}"
 MAX_MODEL_LEN="${MEGA_MAX_MODEL_LEN:-8192}"
@@ -15,7 +17,6 @@ ARGS=(
   --max-model-len "$MAX_MODEL_LEN"
   --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
   --tensor-parallel-size "${MEGA_TENSOR_PARALLEL_SIZE:-1}"
-  --language-model-only
 )
 
 if [[ -n "${MEGA_INFERENCE_API_KEY:-}" ]]; then
@@ -46,6 +47,6 @@ if (( ${#LORA_MODULES[@]} > 0 )); then
   ARGS+=(--lora-modules "${LORA_MODULES[@]}")
 fi
 
-echo "Starting MEGA inference server with base model: $BASE_MODEL"
+echo "Starting MEGA inference server with OpenAI open-weight base: $BASE_MODEL"
 echo "Loaded specialist adapters: ${#LORA_MODULES[@]}"
 exec vllm "${ARGS[@]}"
