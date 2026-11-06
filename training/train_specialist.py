@@ -140,7 +140,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Entrena un adaptador LoRA de MEGA")
     parser.add_argument("--dataset", required=True, type=Path)
     parser.add_argument("--specialist", required=True, choices=sorted(SPECIALISTS))
-    parser.add_argument("--base-model", default=os.getenv("MEGA_BASE_MODEL", "Qwen/Qwen3.5-4B"))
+    parser.add_argument("--base-model", default=os.getenv("MEGA_BASE_MODEL", "openai/gpt-oss-20b"))
     parser.add_argument("--output", type=Path, default=Path("models"))
     parser.add_argument("--epochs", type=float, default=2.0)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
