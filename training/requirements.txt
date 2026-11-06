@@ -1,0 +1,7 @@
+# Versiones compatibles del entorno de entrenamiento; instalar PyTorch según CUDA del host.
+torch>=2.4
+transformers>=4.48
+datasets>=3.0
+peft>=0.14
+accelerate>=1.2
+safetensors>=0.4
